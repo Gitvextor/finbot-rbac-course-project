@@ -1,0 +1,16 @@
+semantic-router 
+langchain 
+langchain-groq 
+langchain-community 
+langgraph 
+sentence-transformers
+fastapi
+qdrant-client
+groq
+docling-hierarchical-pdf
+requests
+pydantic
+langsmith
+uvicorn
+python-dotenv
+pandas
