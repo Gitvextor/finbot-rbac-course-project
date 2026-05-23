@@ -1,172 +1,53 @@
-# 💼 FinBot – Advanced RAG System with RBAC, Guardrails & Evaluation
+# Secure Corporate RAG Assistant
+# 企业文档安全RAG问答助手
 
-## 📌 Overview
+## 项目概述
 
-**FinBot** is an enterprise-grade Retrieval-Augmented Generation (RAG) system built for **FinSolve Technologies**, a B2B fintech company.
+面向公司内部文档的安全RAG问答系统，实现：
+- 文档加密存储（AES-256）
+- 基于级别和部门的RBAC权限控制
+- 敏感信息脱敏
+- Prompt Injection防护
+- 文档完整性验证与数字签名
+- 审计日志追踪
 
-The system is designed to:
-- Enable employees to query internal documents using natural language
-- Enforce **Role-Based Access Control (RBAC)** at the retrieval level
-- Prevent unauthorized access, prompt injection, and hallucinated outputs
-- Provide **accurate, cited, and grounded responses**
-- Be evaluated rigorously using **RAGAS metrics**
+## 权限设计
 
-This is deployed on **Azure AI Foundry**. **GitHubApp** is installed on this app. It uses a **multi‑agent system** with **LangGraph** for the operations. **LangSmith** is used for tracing and observability.
+### 用户级别 (Level)
+- **L1_Executive**: 公司高管，可访问所有部门文档
+- **L2_Director**: 部门总监，可访问本部门及以下级别文档
+- **L3_Manager**: 部门经理，可访问本部门核心文档
+- **L4_Staff**: 普通员工，可访问公开文档
 
----
+### 部门 (Department)
+- **Executive**: 执行部门
+- **HR**: 人力资源部
+- **Finance**: 财务部
+- **IT**: 信息技术部
+- **Sales**: 销售部
+- **R&D**: 研发部
+- **Legal**: 法务部
+- **Public**: 公共/公开部门
 
-## 🎯 Objective
+## 目录结构
 
-The goal of this project is to build a **production-ready AI assistant** that:
+```
+secure-corporate-rag/
+├── backend/
+│   ├── api/              # API路由
+│   ├── models/           # 数据模型
+│   ├── security/         # 安全模块
+│   │   ├── crypto_utils.py      # AES加密
+│   │   ├── hash_utils.py        # SHA-256哈希
+│   │   ├── signature_utils.py   # RSA签名
+│   │   └── hmac_utils.py         # HMAC认证
+│   ├── services/         # 业务服务
+│   └── main.py           # FastAPI入口
+├── documents/            # 加密文档存储
+├── keys/                 # 密钥存储
+└── requirements.txt      # Python依赖
+```
 
-- Retrieves information only from **authorized document collections**
-- Uses **structured document parsing (Docling)** for better retrieval quality
-- Routes queries intelligently using **semantic routing**
-- Applies **input/output guardrails** for safety and reliability
-- Measures performance using **RAGAS evaluation metrics**
+--------------以下不用看------------------
 
----
-
-## 🏗️ System Architecture
-
-### 🔄 High-Level Flow
-User Query
-↓
-Input Guardrails (Injection / Off-topic / PII)
-↓
-Semantic Router (Intent Classification)
-↓
-RBAC Enforcement (Role + Route Intersection)
-↓
-Vector Retrieval (Qdrant with Metadata Filters)
-↓
-LLM (Groq – LLaMA 3.1)
-↓
-Output Guardrails (Grounding + Citation Check)
-↓
-Final Answer + Citations
-
-
----
-
-## ⚙️ Tech Stack
-
-### 🧠 Backend
-- **Python**
-- **LangChain**
-- **Groq (LLaMA 3.1 8B Instant)** – LLM
-- **SentenceTransformers** – Embeddings
-- **Qdrant** – Vector Database
-- **Docling** – Structured document parsing & hierarchical chunking
-- **Semantic Router** – Query intent classification
-
----
-
-### 🗄️ Data Processing
-- Hierarchical chunking using **Docling**
-- Metadata-rich chunks with:
-  - `collection`
-  - `access_roles`
-  - `section_title`
-  - `page_number`
-  - `chunk_type`
-  - `parent_chunk_id`
-
----
-
-### 🛡️ Guardrails
-
-#### Input Guardrails
-- Prompt Injection Detection
-- Off-topic Query Detection
-- PII Detection
-- Rate Limiting
-
-#### Output Guardrails
-- Grounding Check (prevents hallucinated numbers)
-- Cross-role leakage prevention
-- Citation enforcement
-
----
-
-### 🌐 Frontend
-- **Next.js**
-- Role-based login system
-- Chat interface with:
-  - Answer + citations
-  - User role display
-  - Selected semantic route
-  - Guardrail warnings
-
----
-
-## 🔐 Role-Based Access Control (RBAC)
-
-RBAC is enforced **at the vector database level** using metadata filtering in **Qdrant**.
-
-| Role        | Access |
-|------------|--------|
-| employee   | General |
-| finance    | Finance + General |
-| engineering| Engineering + General |
-| marketing  | Marketing + General |
-| c_level    | All collections |
-
-➡️ Unauthorized data is **never retrieved**, even with adversarial prompts.
-
----
-
-## 🧭 Query Routing
-
-Semantic routing classifies queries into:
-
-- `finance_route`
-- `engineering_route`
-- `marketing_route`
-- `hr_general_route`
-- `cross_department_route`
-
-The selected route is then **validated against user role** before retrieval.
-
----
-
-## 📊 Evaluation (RAGAS)
-
-The system is evaluated using **RAGAS** with a custom dataset of 40+ QA pairs.
-
-### 📈 Key Metrics
-
-| Metric              | Score |
-|-------------------|------|
-| Answer Relevancy  | **0.93** |
-| Context Recall    | **1.00** |
-
-
----
-
-## 🚀 Key Features
-
-- ✅ Secure retrieval with RBAC at source level  
-- ✅ Structured document understanding via hierarchical chunking  
-- ✅ Intelligent query routing  
-- ✅ Strong guardrails against misuse  
-- ✅ High evaluation scores with measurable performance  
-- ✅ Scalable and modular architecture  
-
-
-## ⚡ Setup Instructions
-
-```bash
-# Clone repo
-git clone <your-repo-link>
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run backend
-uvicorn main:app --reload
-
-# Run frontend
-cd frontend
-npm install
-npm run dev
+自用：激活虚拟环境：.\venv\Scripts\Activate.ps1

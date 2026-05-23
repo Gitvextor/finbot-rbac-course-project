@@ -1,27 +1,45 @@
-# Environment variables (contains secrets)
-.env
-backend/.env
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
+ENV/
+env/
 .venv/
 
-# Qdrant local data
-backend/qdrant_data/
-qdrant_data/
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Node
-node_modules/
-.next/
-finbot-frontend/node_modules/
-finbot-frontend/.next/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Keys and secrets
+keys/
+*.pem
+*.key
+
+# Documents (encrypted files)
+documents/
+
+# Environment
+.env
+.env.local
+
+# Temporary
+tmp/
+temp/
+*.tmp
