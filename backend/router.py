@@ -42,7 +42,6 @@ def check_rate_limit(session_id: str):
 # -------------------------------
 def detect_prompt_injection(text: str):
     text_lower = text.lower()
-
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, text_lower):
             raise ValueError("❌ Prompt injection detected. Request blocked.")
@@ -242,7 +241,7 @@ class SimpleSemanticRouterGuardrail:
         print(f"Routing query: '{user_input}'")
 
         if not user_input or not user_input.strip():
-            return "hr_general", False, None
+            return "general", False, None
 
         result = self.router(user_input)
 
@@ -256,7 +255,7 @@ class SimpleSemanticRouterGuardrail:
         if result and result.name == "potentially_harmful":
             return "potentially_harmful", True, HARMFUL_REPLY
 
-        route_name = result.name if (result and result.name) else "hr_general"
+        route_name = result.name if (result and result.name) else "general"
         return route_name, False, None
 
 
@@ -276,10 +275,8 @@ def route_query(query: str, session_id: str = None) -> str:
     Raises:
         ValueError → if blocked
     """
-
     print(f"Received query: '{query}'")
     route_name, blocked, reply = guardrail(query, session_id)
-
     print(f"Routed to: '{route_name}', Blocked: {blocked}")
 
     if blocked:
