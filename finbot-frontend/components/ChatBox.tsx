@@ -1,6 +1,6 @@
 "use client";
 import { useAuth } from "../context/AuthContext";
-import { useState } from "react";
+import { KeyboardEvent, useState } from "react";
 import MessageBubble from "./MessageBubble";
 import { sendQuery } from "../lib/api";
 import { Message } from "@/types";
@@ -13,22 +13,21 @@ export default function ChatBox() {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // ✅ Replace hardcoded values
     const user_id = user?.user_id;
     const role = user?.role;
 
     const handleSend = async () => {
-        if (!input.trim()) return;
+        if (!input.trim() || loading) return;
 
-        // ✅ Safety check (optional but recommended)
         if (!user_id || !role) {
-            alert("User not logged in");
+            alert("请先登录");
             return;
         }
 
+        const query = input.trim();
         const newMessages: Message[] = [
             ...messages,
-            { role: "user", content: input },
+            { role: "user", content: query },
         ];
 
         setMessages(newMessages);
@@ -39,24 +38,24 @@ export default function ChatBox() {
             const res = await sendQuery({
                 user_id,
                 role,
-                query: input,
+                query,
             });
 
             const botReply =
                 res.answer ||
                 res.block_reason ||
-                "⚠️ Something went wrong";
+                "⚠️ 请求异常，请稍后重试";
 
             setMessages([
                 ...newMessages,
                 { role: "assistant", content: botReply },
             ]);
-        } catch (err) {
+        } catch {
             setMessages([
                 ...newMessages,
                 {
                     role: "assistant",
-                    content: "❌ Failed to connect to server",
+                    content: "❌ 无法连接服务器，请确认后端已启动",
                 },
             ]);
         }
@@ -64,12 +63,19 @@ export default function ChatBox() {
         setLoading(false);
     };
 
+    const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            void handleSend();
+        }
+    };
+
     return (
         <div className={styles.chatbox}>
             <div className={styles.chatboxHeader}>
                 <span>FinBot 💼</span>
                 <button onClick={logout} className={styles.logoutBtn}>
-                    Logout
+                    退出
                 </button>
             </div>
 
@@ -79,19 +85,22 @@ export default function ChatBox() {
                 ))}
                 {loading && (
                     <p className={styles.thinking}>
-                        Thinking... First query may take 1-2 minutes while the
-                        knowledge base is built.
+                        思考中… 首次提问可能需要 1–2 分钟构建知识库
                     </p>
                 )}
             </div>
 
             <div className={styles.chatboxInput}>
-                <input
+                <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Ask something..."
+                    onKeyDown={handleKeyDown}
+                    placeholder="输入问题（Enter 发送，Shift+Enter 换行）"
+                    rows={3}
                 />
-                <button onClick={handleSend}>Send</button>
+                <button onClick={() => void handleSend()} disabled={loading}>
+                    发送
+                </button>
             </div>
         </div>
     );

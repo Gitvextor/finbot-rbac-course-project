@@ -200,8 +200,9 @@ def chat_endpoint(body: ChatRequest, request: Request):
     allowed_collections = ROLE_COLLECTIONS.get(body.role, ["general"])
     if route not in allowed_collections:
         reason = (
-            f"Access denied: role '{body.role}' cannot access collection '{route}'. "
-            f"Allowed: {allowed_collections}"
+            f"访问被拒绝：角色 `{body.role}` 无权访问 `{route}` 文档库。"
+            f"允许范围：{allowed_collections}。"
+            f"请更换角色（如 c_level）或使用与部门匹配的问题。"
         )
         _log_query_audit(
             body.user_id, "", body.query,

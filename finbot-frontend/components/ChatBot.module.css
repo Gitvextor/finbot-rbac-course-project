@@ -73,6 +73,25 @@
     background: #020617;
 }
 
+.chatboxInput textarea {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+    background: #1e293b;
+    color: #e2e8f0;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 72px;
+    font-family: inherit;
+    line-height: 1.5;
+}
+
+.chatboxInput textarea::placeholder {
+    color: #64748b;
+}
+
 .chatboxInput input {
     flex: 1;
     padding: 10px 12px;
@@ -102,4 +121,9 @@
 
 .chatboxInput button:hover {
     background: #2563eb;
+}
+
+.chatboxInput button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }

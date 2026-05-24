@@ -48,7 +48,7 @@ class OutputGuardrails:
                     break
 
             if not derived:
-                return UNGROUNDED_WARNING
+                return response + UNGROUNDED_WARNING
 
         return response
 
@@ -74,14 +74,17 @@ class OutputGuardrails:
     # 3. Citation Check
     # -------------------------------
     def citation_check(self, response: str, context: str) -> str:
-        """
-        Ensure context contains citation indicators (e.g., 'Page X').
-        """
+        """Ensure retrieved context includes source markers used by the RAG pipeline."""
+        if not context.strip():
+            return response
 
-        if not re.search(r"(?i)(?:page|source)\s*\d+", context.lower()):
-            return CITATION_WARNING
+        if re.search(r"\[Source\s+\d+\s*\|", context, re.IGNORECASE):
+            return response
 
-        return response
+        if re.search(r"(?i)(?:page|source)\s*\d+", context):
+            return response
+
+        return response + CITATION_WARNING
 
 
     # -------------------------------

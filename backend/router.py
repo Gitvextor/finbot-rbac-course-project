@@ -23,6 +23,50 @@ from semantic_router.encoders import HuggingFaceEncoder
 from config import PII_PATTERNS, INJECTION_PATTERNS, MAX_QUERIES, ROUTER_MODEL
 
 
+# Chinese / bilingual keyword hints for short queries the semantic router often misclassifies.
+ROUTE_KEYWORDS = {
+    "engineering": [
+        "后端", "技术栈", "微服务", "架构", "部署", "ci/cd", "cicd", "devops",
+        "kubernetes", "docker", "api", "sla", "sprint", "engineering", "工程",
+        "系统架构", "开发环境", "代码", "服务器",
+    ],
+    "finance": [
+        "财务", "收入", "利润", "预算", "损益", "报表", "finance", "revenue",
+        "profit", "budget", "ebitda", "balance", "支出", "会计", "季度",
+    ],
+    "hr": [
+        "员工", "人力", "hr", "请假", "年假", "薪资", "工资", "headcount",
+        "pavan", "lucknow", "绩效", "部门人数", "女员工",
+    ],
+    "marketing": [
+        "营销", "市场", "leads", "获客", "campaign", "roi", "转化", "marketing",
+        "广告", "渠道", "流量", "engagement",
+    ],
+    "general": [
+        "愿景", "使命", "价值观", "onboarding", "入职", "福利", "请假类型",
+        "工作时间", "dress code", "辞职",
+    ],
+}
+
+
+def keyword_route(query: str) -> str | None:
+    """Keyword fallback for short Chinese/English queries."""
+    text = query.lower().strip()
+    if not text:
+        return None
+
+    scores: dict[str, int] = {name: 0 for name in ROUTE_KEYWORDS}
+    for route_name, keywords in ROUTE_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text:
+                scores[route_name] += 1
+
+    best_route, best_score = max(scores.items(), key=lambda item: item[1])
+    if best_score > 0:
+        return best_route
+    return None
+
+
 # -------------------------------
 # SESSION RATE LIMITING
 # -------------------------------
@@ -77,6 +121,14 @@ engineering = Route(
         "What is the SLA for our API uptime?",
         "What is the software development lifecycle?",
         "Explain SDLC",
+        "后端用了什么技术栈？",
+        "微服务架构是怎么工作的？",
+        "API 的 uptime SLA 是多少？",
+        "解释一下 CI/CD 流水线",
+        "生产环境部署现状如何？",
+        "后端技术栈",
+        "技术栈是什么",
+        "系统用了哪些技术",
     ],
     score_threshold=0.3,
 )
@@ -96,6 +148,11 @@ finance = Route(
         "What is the company's net profit?",
         "Show me accounting reports for this quarter",
         "What are the capital expenditures this year?",
+        "公司本季度总收入是多少？",
+        "显示损益表",
+        "今年的运营预算是多少？",
+        "净利润是多少？",
+        "各部门总支出是多少？",
     ],
 )
 
@@ -117,6 +174,10 @@ general = Route(
         "What is IT usage policy?",
         "How are salaries structured?",
         "What is the resignation process?",
+        "公司的愿景和使命是什么？",
+        "新员工 onboarding 流程是什么？",
+        "有哪些请假类型？",
+        "标准工作时间是什么？",
     ],
 )
 
@@ -134,6 +195,11 @@ hr = Route(
         "What is the total leave balance for employees in Technology department?",
         "How many employees have performance rating above 4?",
         "How many employees are in the Finance department?",
+        "财务部门有多少员工？",
+        "Lucknow 有多少员工？",
+        "HR 部门有多少女员工？",
+        "Senior HR Executive 的平均薪资是多少？",
+        "Pavan Krishnan 还剩多少年假？",
     ],
     score_threshold=0.3,
 )
@@ -153,6 +219,11 @@ marketing = Route(
         "Content calendar",
         "Ad campaign analytics",
         "Engagement rates",
+        "营销活动表现如何？",
+        "生成了多少 leads？",
+        "获客成本是多少？",
+        "各渠道转化率怎么样？",
+        "营销 ROI 是多少？",
     ],
 )
 
@@ -212,11 +283,10 @@ rl = SemanticRouter(
 # Guardrail Wrapper
 # ---------------------------------------------------------------------------
 OFF_TOPIC_REPLY = (
-    "❌ I can only help with company-related queries across Engineering, "
-    "Finance, HR, or Marketing. Please rephrase your question."
+    "❌ 我只能回答与公司相关的工程、财务、HR、市场等问题，请换一种问法。"
 )
 
-HARMFUL_REPLY = "❌ I cannot help with that request."
+HARMFUL_REPLY = "❌ 我无法协助该请求。"
 
 
 class SimpleSemanticRouterGuardrail:
@@ -242,6 +312,11 @@ class SimpleSemanticRouterGuardrail:
 
         if not user_input or not user_input.strip():
             return "general", False, None
+
+        keyword_hit = keyword_route(user_input)
+        if keyword_hit:
+            print(f"Keyword route: '{keyword_hit}'")
+            return keyword_hit, False, None
 
         result = self.router(user_input)
 

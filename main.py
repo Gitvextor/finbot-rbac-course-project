@@ -11,21 +11,57 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
+import webbrowser
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIR = ROOT / "finbot-frontend"
 
 BACKEND_URL = "http://127.0.0.1:8000"
-FRONTEND_URL = "http://127.0.0.1:3000"
+FRONTEND_URL = "http://localhost:3000"
+BACKEND_PORT = 8000
+FRONTEND_PORT = 3000
 
 processes: list[subprocess.Popen] = []
 
 
 def log(message: str) -> None:
     print(f"[launcher] {message}", flush=True)
+
+
+def free_port(port: int) -> None:
+    """Stop processes that are still holding dev ports from a previous run."""
+    if sys.platform == "win32":
+        script = (
+            f"Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | "
+            "Select-Object -ExpandProperty OwningProcess -Unique | "
+            "Where-Object { $_ -gt 0 } | "
+            "ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+        )
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+
+    subprocess.run(
+        ["fuser", "-k", f"{port}/tcp"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def prepare_ports() -> None:
+    log(f"Freeing ports {BACKEND_PORT} and {FRONTEND_PORT} if needed...")
+    free_port(BACKEND_PORT)
+    free_port(FRONTEND_PORT)
+    time.sleep(1)
 
 
 def require_paths() -> None:
@@ -91,8 +127,31 @@ def on_exit(signum, frame) -> None:  # noqa: ARG001
     raise SystemExit(0)
 
 
+def wait_for_url(url: str, timeout_sec: int = 60) -> bool:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        try:
+            with urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except (URLError, OSError):
+            pass
+        time.sleep(1)
+    return False
+
+
+def open_frontend_when_ready() -> None:
+    log(f"Waiting for frontend at {FRONTEND_URL} ...")
+    if wait_for_url(FRONTEND_URL):
+        webbrowser.open(FRONTEND_URL)
+        log(f"Opened browser: {FRONTEND_URL}")
+        return
+    log(f"Frontend not ready in time. Open manually: {FRONTEND_URL}")
+
+
 def main() -> None:
     require_paths()
+    prepare_ports()
     ensure_frontend_env()
     ensure_frontend_deps()
 
@@ -115,6 +174,7 @@ def main() -> None:
     )
     time.sleep(2)
     processes.append(spawn("frontend", [npm, "run", "dev"], FRONTEND_DIR))
+    threading.Thread(target=open_frontend_when_ready, daemon=True).start()
 
     log("Services started.")
     log(f"Backend:  {BACKEND_URL}")

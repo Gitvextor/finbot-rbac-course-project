@@ -33,6 +33,7 @@ from qdrant_client.models import (
     Filter,
     FieldCondition,
     MatchValue,
+    MatchAny,
 )
 
 from config import (
@@ -40,7 +41,10 @@ from config import (
     COLLECTION_NAME,
     DEEPSEEK_MODEL,
     DEEPSEEK_API_BASE,
-    SENTENCE_TRANSFORMER_LLM
+    SENTENCE_TRANSFORMER_LLM,
+    NO_CONTEXT_MESSAGE,
+    RAG_SYSTEM_PROMPT,
+    ROLE_COLLECTIONS,
 )
 
 from output_guardrails import OutputGuardrails
@@ -65,7 +69,10 @@ def get_llm_client() -> OpenAI:
 def chat_completion(client: OpenAI, user_message: str):
     return client.chat.completions.create(
         model=DEEPSEEK_MODEL,
-        messages=[{"role": "user", "content": user_message}],
+        messages=[
+            {"role": "system", "content": RAG_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
         temperature=0.2,
         extra_body={"thinking": {"type": "disabled"}},
     )
@@ -287,27 +294,54 @@ def collect_all_chunks_qdrant(chunks:List[Dict[str, Any]], client:QdrantClient, 
 # Retrieval
 # -------------------------------
 @traceable(name="Retrieval Step")
-def retrieve_and_context(query:str, role:str, client:QdrantClient, embedder:SentenceTransformer, stream:str) -> tuple[str, List[str], List[str]]:
+def retrieve_and_context(
+    query: str,
+    role: str,
+    client: QdrantClient,
+    embedder: SentenceTransformer,
+    stream: str,
+) -> tuple[str, List[str], List[str]]:
     query_vector = embedder.encode(query).tolist()
 
-    results = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=query_vector,
-        query_filter=Filter(
-            must=[
-                FieldCondition(
-                    key="access_roles",
-                    match=MatchValue(value=role),
-                ),
+    def _query(collection: str | None = None, collections: List[str] | None = None):
+        conditions = [
+            FieldCondition(
+                key="access_roles",
+                match=MatchValue(value=role),
+            )
+        ]
+        if collection:
+            conditions.append(
                 FieldCondition(
                     key="collection",
-                    match=MatchValue(value=stream),
+                    match=MatchValue(value=collection),
                 )
-            ]
-        ),
-        limit=5,
-        with_payload=True,
-    )
+            )
+        elif collections:
+            conditions.append(
+                FieldCondition(
+                    key="collection",
+                    match=MatchAny(any=collections),
+                )
+            )
+
+        return client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            query_filter=Filter(must=conditions),
+            limit=5,
+            with_payload=True,
+        )
+
+    results = _query(collection=stream)
+
+    if not results.points:
+        allowed = ROLE_COLLECTIONS.get(role, ["general"])
+        print(
+            f"[retrieve] No hits for stream={stream}, role={role}; "
+            f"retry across allowed collections: {allowed}"
+        )
+        results = _query(collections=allowed)
 
     parts = []
 
@@ -364,17 +398,20 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
         query, role, client, embedder, stream
     )
 
+    if not context.strip() and not csv_computed_context:
+        print(f"[answer] No retrieved context for role={role}, stream={stream}")
+        return NO_CONTEXT_MESSAGE, context_chunks
+
     llm_client = get_llm_client()
 
     # ----- If CSV computation succeeded, use computed data as primary source -----
     if csv_computed_context:
         user_message = (
-            f"The following data was computed directly from the company's HR database and is accurate:\n\n"
+            f"以下数据来自公司 HR 数据库，可直接作为准确依据：\n\n"
             f"{csv_computed_context}\n\n"
-            f"Additional context from documents:\n{context}\n\n"
-            f"Question: {query}\n\n"
-            f"Use the computed data above as your primary source to answer the question. "
-            f"Present the answer clearly and concisely."
+            f"文档补充 Context（可能为英文）：\n{context}\n\n"
+            f"用户问题：{query}\n\n"
+            f"请优先使用计算结果，并用 Markdown 格式用中文回答。"
         )
 
         response = chat_completion(llm_client, user_message)
@@ -386,16 +423,19 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
         final_response = response.choices[0].message.content
 
         # Add CSV-specific citation
-        final_response += "\n\nCitations:\n"
-        final_response += "[Source: hr_data.csv (computed from database)]\n"
+        final_response += "\n\n## 引用来源\n\n"
+        final_response += "- `[Source: hr_data.csv (computed from database)]`\n"
         for citation in citations:
-            final_response += f"{citation}\n"
+            final_response += f"- `{citation}`\n"
 
         print('final_response: ', final_response)
         return final_response, context_chunks
 
     # ----- Normal RAG flow (no CSV computation) -----
-    user_message = f"Context:\n{context}\n\nQuestion: {query}"
+    user_message = (
+        f"Context（检索到的文档片段，可能为英文）：\n{context}\n\n"
+        f"用户问题：{query}"
+    )
 
     response = chat_completion(llm_client, user_message)
 
@@ -409,10 +449,10 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
         role,
     )
 
-    final_response += "\n\nCitations:\n"
+    final_response += "\n\n## 引用来源\n\n"
 
     for citation in citations:
-        final_response += f"{citation}\n"
+        final_response += f"- `{citation}`\n"
 
     print('final_response: ', final_response)
 

@@ -102,6 +102,13 @@ DEEPSEEK_API_BASE = "https://api.deepseek.com"
 ROUTER_MODEL = resolve_model_path(ROUTER_MODEL_LOCAL, ROUTER_MODEL_REMOTE)
 SENTENCE_TRANSFORMER_LLM = resolve_model_path(RAG_MODEL_LOCAL, RAG_MODEL_REMOTE)
 
+RAG_SYSTEM_PROMPT = """你是 FinBot 企业文档安全问答助手。
+- 用户可能用中文或英文提问；检索到的 Context 可能为英文。
+- 你必须始终使用简体中文回答。
+- 回答必须使用 Markdown 格式（如 ## 标题、- 列表、**加粗**、表格等），结构清晰。
+- 仅基于提供的 Context 作答；若 Context 不足以回答，请明确说明未找到相关信息，不要编造。
+- 不要在回答正文中重复列出引用来源，来源由系统单独附加。"""
+
 # Role → accessible collections (RBAC for RAG queries)
 ROLE_COLLECTIONS = {
     "c_level":     ["engineering", "finance", "hr", "marketing", "general"],
@@ -178,6 +185,15 @@ UNGROUNDED_WARNING = (
 
 CITATION_WARNING = (
     "\n\n⚠️ 注意：回答缺少明确的来源引用，请参考原始文档验证。"
+)
+
+NO_CONTEXT_MESSAGE = (
+    "## 未找到相关文档\n\n"
+    "未在知识库中找到与您问题相关的文档片段。\n\n"
+    "建议：\n"
+    "- 使用更具体的问题（如工程/财务/HR/市场相关）\n"
+    "- 确认登录角色有权访问对应部门文档\n"
+    "- 可尝试：`c_level` 角色以获得最全访问权限"
 )
 
 LEAKAGE_WARNING = (
