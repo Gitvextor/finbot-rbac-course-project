@@ -6,7 +6,6 @@
     right: 0;
     bottom: 0;
     background: rgba(2, 6, 23, 0.85);
-    /* dark overlay */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -18,22 +17,46 @@
     background: #0f172a;
     padding: 24px;
     border-radius: 12px;
-    width: 320px;
+    width: 360px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     border: 1px solid #1e293b;
 }
 
-/* Title */
 .modal h2 {
     margin: 0;
     color: #e2e8f0;
     text-align: center;
 }
 
-/* Input + Select */
+.subtitle {
+    margin: 0 0 8px;
+    color: #94a3b8;
+    font-size: 13px;
+    text-align: center;
+}
+
+.label {
+    color: #cbd5e1;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.hint {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.error {
+    margin: 0;
+    color: #f87171;
+    font-size: 13px;
+}
+
 .modal input,
 .modal select {
     padding: 10px;
@@ -49,7 +72,6 @@
     color: #64748b;
 }
 
-/* Buttons */
 .modal button {
     padding: 10px;
     border-radius: 8px;
@@ -57,24 +79,23 @@
     font-weight: 500;
     cursor: pointer;
     transition: 0.2s ease;
+    margin-top: 4px;
 }
 
-/* Login button */
-.modal button:first-of-type {
+.primary {
     background: #3b82f6;
     color: white;
 }
 
-.modal button:first-of-type:hover {
+.primary:hover {
     background: #2563eb;
 }
 
-/* Cancel button */
-.modal .secondary {
+.secondary {
     background: #334155;
     color: #e2e8f0;
 }
 
-.modal .secondary:hover {
+.secondary:hover {
     background: #475569;
 }

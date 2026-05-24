@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 import sys
 import traceback
+import uuid
 from pathlib import Path
 
 # Add backend to path
@@ -34,6 +35,8 @@ except ImportError as e:
     RAG_AVAILABLE = False
     RAG_IMPORT_ERROR = str(e)
     print(f"[WARNING] RAG pipeline not available: {e}")
+
+SERVER_BOOT_ID = str(uuid.uuid4())
 
 
 @asynccontextmanager
@@ -300,6 +303,7 @@ async def root():
 async def health_check():
     return {
         "status": "ok",
+        "boot_id": SERVER_BOOT_ID,
         "services": {
             "database": "connected",
             "encryption": "available",
