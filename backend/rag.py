@@ -15,7 +15,7 @@ from csv_handler import (
     get_csv_files_for_collection,
 )
 from sentence_transformers import SentenceTransformer
-from groq import Groq
+from openai import OpenAI
 
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
@@ -38,7 +38,8 @@ from qdrant_client.models import (
 from config import (
     ROLE_ACCESS,
     COLLECTION_NAME,
-    GROQ_MODEL,
+    DEEPSEEK_MODEL,
+    DEEPSEEK_API_BASE,
     SENTENCE_TRANSFORMER_LLM
 )
 
@@ -52,6 +53,22 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".csv"}
 DATA_ROOT = Path(__file__).parent.parent / "data"
 
 load_dotenv()
+
+
+def get_llm_client() -> OpenAI:
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set in backend/.env")
+    return OpenAI(api_key=api_key, base_url=DEEPSEEK_API_BASE)
+
+
+def chat_completion(client: OpenAI, user_message: str):
+    return client.chat.completions.create(
+        model=DEEPSEEK_MODEL,
+        messages=[{"role": "user", "content": user_message}],
+        temperature=0.2,
+        extra_body={"thinking": {"type": "disabled"}},
+    )
 
 
 # -------------------------------
@@ -135,7 +152,8 @@ def load_documents_chunker() -> List[Any]:
         folder = DATA_ROOT / collection
 
         if not folder.exists():
-            return []
+            print(f"[load_documents] Skip missing folder: {folder}")
+            continue
 
         files = [
             f for f in folder.iterdir()
@@ -144,6 +162,12 @@ def load_documents_chunker() -> List[Any]:
 
         for file_path in files:
             try:
+                if file_path.suffix.lower() == ".pdf":
+                    print(
+                        f"[load_documents] Skip PDF (requires HuggingFace models): {file_path.name}"
+                    )
+                    continue
+
                 # ----- DIVERT: CSV files go through csv_handler -----
                 if file_path.suffix.lower() == ".csv":
                     access_roles = ROLE_ACCESS.get(collection, ["all"])
@@ -340,7 +364,7 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
         query, role, client, embedder, stream
     )
 
-    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    llm_client = get_llm_client()
 
     # ----- If CSV computation succeeded, use computed data as primary source -----
     if csv_computed_context:
@@ -353,11 +377,7 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
             f"Present the answer clearly and concisely."
         )
 
-        response = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": user_message}],
-            temperature=0.2,
-        )
+        response = chat_completion(llm_client, user_message)
 
         print("response_llm: ", response)
 
@@ -377,11 +397,7 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
     # ----- Normal RAG flow (no CSV computation) -----
     user_message = f"Context:\n{context}\n\nQuestion: {query}"
 
-    response = groq_client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": user_message}],
-        temperature=0.2,
-    )
+    response = chat_completion(llm_client, user_message)
 
     print("response_llm: ", response)
 

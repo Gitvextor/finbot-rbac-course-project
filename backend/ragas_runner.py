@@ -3,7 +3,7 @@
 import os
 from datasets import Dataset
 
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 
 from ragas import evaluate
@@ -19,7 +19,7 @@ from ragas.run_config import RunConfig
 
 from rag import answer
 from router import route_query
-from config import mock_ques, mock_ground_truth
+from config import mock_ques, mock_ground_truth, DEEPSEEK_MODEL, DEEPSEEK_API_BASE
 from langsmith import traceable
 
 # -------------------------------
@@ -47,10 +47,12 @@ def evaluation():
     # LLM + Embeddings for RAGAS
     # -------------------------------
     ragas_llm = LangchainLLMWrapper(
-        ChatGroq(
-            model="llama-3.1-8b-instant",
+        ChatOpenAI(
+            model=DEEPSEEK_MODEL,
             temperature=0.2,
-            api_key=os.environ.get("GROQ_API_KEY"),
+            api_key=os.environ.get("DEEPSEEK_API_KEY"),
+            base_url=DEEPSEEK_API_BASE,
+            model_kwargs={"extra_body": {"thinking": {"type": "disabled"}}},
         )
     )
 

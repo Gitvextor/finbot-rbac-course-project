@@ -19,25 +19,28 @@
 fastapi
 uvicorn[standard]
 pydantic
+email-validator==2.1.0
 python-multipart
 sqlalchemy
-passlib[bcrypt]
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
 python-jose[cryptography]
 cryptography
 
 # --- 成员B：RAG 管道 ---
 semantic-router
 langchain
-langchain-groq
+langchain-openai
 langchain-community
 langgraph
 sentence-transformers
 qdrant-client
-groq
+# LLM: DeepSeek deepseek-v4-flash (OpenAI-compatible SDK)
+openai
+python-dotenv
 docling
 docling-hierarchical-pdf
 requests
 langsmith
-python-dotenv
 pandas
 ragas

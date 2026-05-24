@@ -77,7 +77,12 @@ export default function ChatBox() {
                 {messages.map((msg, i) => (
                     <MessageBubble key={i} message={msg} />
                 ))}
-                {loading && <p className={styles.thinking}>Thinking...</p>}
+                {loading && (
+                    <p className={styles.thinking}>
+                        Thinking... First query may take 1-2 minutes while the
+                        knowledge base is built.
+                    </p>
+                )}
             </div>
 
             <div className={styles.chatboxInput}>

@@ -20,7 +20,7 @@ from semantic_router import Route
 from semantic_router.routers import SemanticRouter
 from semantic_router.encoders import HuggingFaceEncoder
 
-from config import PII_PATTERNS, INJECTION_PATTERNS, MAX_QUERIES
+from config import PII_PATTERNS, INJECTION_PATTERNS, MAX_QUERIES, ROUTER_MODEL
 
 
 # -------------------------------
@@ -58,7 +58,7 @@ def detect_pii(text: str):
 # ---------------------------------------------------------------------------
 # Encoder
 # ---------------------------------------------------------------------------
-encoder = HuggingFaceEncoder(name="sentence-transformers/all-mpnet-base-v2")
+encoder = HuggingFaceEncoder(name=ROUTER_MODEL)
 
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ import styles from './LoginModal.module.css';
 
 const roles = [
     "employee",
-    "hr",
+    "hr_manager",
     "finance",
     "marketing",
     "engineering",

@@ -6,7 +6,28 @@ import os
 from pathlib import Path
 
 # Base paths
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+MODELS_DIR = PROJECT_ROOT / "models"
+
+ROUTER_MODEL_REMOTE = "sentence-transformers/all-mpnet-base-v2"
+ROUTER_MODEL_LOCAL = MODELS_DIR / "all-mpnet-base-v2"
+RAG_MODEL_REMOTE = "sentence-transformers/all-MiniLM-L6-v2"
+RAG_MODEL_LOCAL = MODELS_DIR / "all-MiniLM-L6-v2"
+
+
+def resolve_model_path(local_dir: Path, remote_name: str) -> str:
+    """Prefer a complete local model directory; otherwise use remote repo id."""
+    if not local_dir.exists() or not (local_dir / "config.json").exists():
+        return remote_name
+
+    has_weights = (local_dir / "model.safetensors").exists() or (
+        local_dir / "pytorch_model.bin"
+    ).exists()
+    if has_weights:
+        return str(local_dir.resolve())
+
+    return remote_name
 DOCUMENTS_DIR = BASE_DIR / "documents"
 KEYS_DIR = BASE_DIR / "keys"
 
@@ -76,8 +97,10 @@ AUDIT_LOG_FILE = BASE_DIR / "audit_logs.jsonl"
 # ============================================================
 
 COLLECTION_NAME = "finbot_docs"
-GROQ_MODEL = "llama-3.1-8b-instant"
-SENTENCE_TRANSFORMER_LLM = "all-MiniLM-L6-v2"
+DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEEPSEEK_API_BASE = "https://api.deepseek.com"
+ROUTER_MODEL = resolve_model_path(ROUTER_MODEL_LOCAL, ROUTER_MODEL_REMOTE)
+SENTENCE_TRANSFORMER_LLM = resolve_model_path(RAG_MODEL_LOCAL, RAG_MODEL_REMOTE)
 
 # Role → accessible collections (RBAC for RAG queries)
 ROLE_COLLECTIONS = {

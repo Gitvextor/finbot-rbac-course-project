@@ -326,10 +326,21 @@ async def api_info():
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
+
+    reload_enabled = os.getenv("FINBOT_RELOAD", "1") == "1"
     uvicorn.run(
         "main:app",
         host=API_HOST,
         port=API_PORT,
-        reload=True,
+        reload=reload_enabled,
+        reload_excludes=[
+            "qdrant_data",
+            "qdrant_data/*",
+            "*.db",
+            "*.db-journal",
+            "__pycache__",
+            "__pycache__/*",
+        ],
     )
