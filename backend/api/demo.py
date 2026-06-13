@@ -1,10 +1,4 @@
-"""
-Demo support APIs for member C's presentation console.
-
-These endpoints live under /api/demo so the classroom demo can seed accounts,
-show document archives, and simulate integrity events without weakening the
-normal auth/document routes.
-"""
+"""Demo support APIs for the FinBot company RBAC console."""
 
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,102 +11,169 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import DOCUMENTS_DIR
 from database import get_db
 from models import AuditAction, AuditLog, Document, User
 from services import AuditService, AuthService, DocumentService
 
 
-router = APIRouter(prefix="/api/demo", tags=["Member C Demo"])
+router = APIRouter(prefix="/api/demo", tags=["Company Demo"])
 
 
 DEMO_ACCOUNTS = [
     {
-        "key": "admin",
-        "label": "Admin",
-        "username": "admin_demo",
-        "email": "admin_demo@finbot.local",
-        "password": "admin@2026",
+        "key": "executive",
+        "label": "Executive",
+        "username": "ceo",
+        "email": "ceo@company.com",
+        "password": "password123",
         "level": "L1_Executive",
         "department": "Executive",
         "is_admin": True,
         "chat_role": "c_level",
-        "scenario": "资料管理、归档查看、全部课程资料访问",
+        "scenario": "全公司资料、跨部门问答、审计演示",
     },
     {
-        "key": "teacher",
-        "label": "Teacher",
-        "username": "teacher_demo",
-        "email": "teacher_demo@finbot.local",
-        "password": "teacher@2026",
+        "key": "hr",
+        "label": "HR Manager",
+        "username": "hr_manager",
+        "email": "hr_manager@company.com",
+        "password": "password123",
+        "level": "L3_Manager",
+        "department": "HR",
+        "is_admin": False,
+        "chat_role": "hr_manager",
+        "scenario": "HR 员工数据、招聘与公共政策",
+    },
+    {
+        "key": "finance",
+        "label": "Finance",
+        "username": "finance_manager",
+        "email": "finance_manager@company.com",
+        "password": "password123",
+        "level": "L3_Manager",
+        "department": "Finance",
+        "is_admin": False,
+        "chat_role": "finance",
+        "scenario": "预算、报表、开支与公共资料",
+    },
+    {
+        "key": "engineering",
+        "label": "Engineering",
+        "username": "rd_director",
+        "email": "rd_director@company.com",
+        "password": "password123",
         "level": "L2_Director",
         "department": "R&D",
         "is_admin": False,
         "chat_role": "engineering",
-        "scenario": "查看教师答案、评分标准和受限教学资料",
+        "scenario": "系统架构、SLA、CI/CD 与工程资料",
     },
     {
-        "key": "ta",
-        "label": "TA",
-        "username": "ta_demo",
-        "email": "ta_demo@finbot.local",
-        "password": "ta@2026",
+        "key": "marketing",
+        "label": "Marketing",
+        "username": "marketing_manager",
+        "email": "marketing_manager@company.com",
+        "password": "password123",
         "level": "L3_Manager",
-        "department": "R&D",
+        "department": "Sales",
         "is_admin": False,
-        "chat_role": "engineering",
-        "scenario": "查看评分标准、工程说明和课程归档",
+        "chat_role": "marketing",
+        "scenario": "营销活动、获客指标与市场报告",
     },
     {
-        "key": "student",
-        "label": "Student",
-        "username": "student_demo",
-        "email": "student_demo@finbot.local",
-        "password": "student@2026",
+        "key": "employee",
+        "label": "Employee",
+        "username": "employee_demo",
+        "email": "employee_demo@company.com",
+        "password": "password123",
         "level": "L4_Staff",
         "department": "Public",
         "is_admin": False,
         "chat_role": "employee",
-        "scenario": "只能访问公开资料，越权请求会被拒绝",
+        "scenario": "仅公共资料，越权访问会被拒绝",
     },
 ]
 
 
 DEMO_DOCUMENTS = [
     {
-        "filename": "course_public_syllabus.md",
+        "filename": "company_public_handbook.md",
         "department": "Public",
         "level": "L4_Staff",
-        "description": "公开课程说明：所有角色可访问",
-        "content": """# FinBot 安全 RAG 课程资料
+        "description": "公司公开手册：所有角色可访问",
+        "content": """# Company Public Handbook
 
-本公开资料包含项目背景、演示流程和公开问答范围。学生可以查看该文件，但不能访问答案文件、评分标准或隐私数据。""",
+## Company Profile
+FinSolve Technologies is a B2B fintech company serving banking, insurance, and investment-management clients. The company builds secure internal platforms for financial analytics, workflow automation, and client reporting.
+
+## Onboarding Process
+New employees complete four steps during onboarding: HR document verification, IT account setup, security awareness training, and manager-led team orientation. During the first 30 days, each employee receives a buddy, reviews role expectations, and completes required compliance modules.
+
+## Employee Benefits
+Employees receive health insurance, paid annual leave, sick leave, wellness support, learning budget reimbursement, and retirement contributions where applicable. Benefits questions should be handled through HRMS or the HR helpdesk.
+
+## Leave Policy
+Annual leave requests are submitted through HRMS and require manager approval. Sick leave can be filed with supporting documentation when required. Emergency leave may be approved retroactively by the manager and HR. Unused annual leave may be carried forward according to the yearly HR policy notice.
+
+## Work Hours and IT Usage
+Standard work hours are 9:30 AM to 6:30 PM, Monday to Friday. Employees must use company devices for internal systems, enable multi-factor authentication, and avoid sharing credentials or confidential documents outside approved channels.""",
     },
     {
-        "filename": "teacher_answer_key.md",
-        "department": "R&D",
-        "level": "L2_Director",
-        "description": "教师答案文件：Teacher/Admin 可访问，Student 越权失败",
-        "content": """# 期末答案文件
-
-该文件模拟教师答案与评分参考，仅 Teacher/Admin 可访问。任何 Student 角色的检索或下载都应被 RBAC 拦截。""",
-    },
-    {
-        "filename": "grading_rubric.md",
+        "filename": "engineering_sla_report.md",
         "department": "R&D",
         "level": "L3_Manager",
-        "description": "课程评分标准：TA/Teacher/Admin 可访问，Student 不可访问",
-        "content": """# 评分标准
+        "description": "工程 SLA 与系统架构：Engineering/Executive 可访问",
+        "content": """# Engineering SLA Report
 
-评分重点包括 RBAC 检索层过滤、Prompt Injection 防护、PII 防护、文档签名与篡改检测、审计记录展示。""",
+工程资料包含 API uptime SLA、CI/CD 流水线、微服务架构、部署状态和 sprint metrics。""",
     },
     {
-        "filename": "student_privacy_records.csv",
+        "filename": "finance_quarterly_summary.md",
+        "department": "Finance",
+        "level": "L3_Manager",
+        "description": "季度财务摘要：Finance/Executive 可访问",
+        "content": """# Quarterly Financial Summary
+
+财务资料包含季度收入、预算执行、费用摘要、供应商付款和财务 KPI。""",
+    },
+    {
+        "filename": "hr_employee_records.csv",
         "department": "HR",
-        "level": "L2_Director",
-        "description": "含隐私字段的学生记录：用于 PII 与权限演示",
-        "content": "name,email,phone,score\nAlice,alice@example.com,5551234567,92\nBob,bob@example.com,5559876543,88\n",
+        "level": "L3_Manager",
+        "description": "员工隐私记录：HR Manager/Executive 可访问",
+        "content": "name,email,phone,department\nAlice,alice@example.com,5551234567,HR\nBob,bob@example.com,5559876543,Finance\n",
+    },
+    {
+        "filename": "marketing_campaign_report.md",
+        "department": "Sales",
+        "level": "L3_Manager",
+        "description": "市场活动报告：Marketing/Executive 可访问",
+        "content": """# Marketing Campaign Report
+
+市场资料包含 campaign performance、leads、cost per lead、conversion channel 和 ROI。""",
     },
 ]
+
+
+LEGACY_DEMO_FILENAMES = [
+    "course_public_syllabus.md",
+    "teacher_answer_key.md",
+    "grading_rubric.md",
+    "student_privacy_records.csv",
+]
+
+
+def _cleanup_seeded_demo_documents(db: Session) -> None:
+    filenames = LEGACY_DEMO_FILENAMES + [item["filename"] for item in DEMO_DOCUMENTS]
+    demo_docs = db.query(Document).filter(Document.original_filename.in_(filenames)).all()
+    for doc in demo_docs:
+        encrypted_path = DOCUMENTS_DIR / doc.filename
+        if encrypted_path.exists():
+            encrypted_path.unlink()
+        db.delete(doc)
+    if demo_docs:
+        db.commit()
 
 
 def _ensure_user(db: Session, account: dict) -> User:
@@ -170,19 +231,20 @@ def _ensure_documents(db: Session, owner: User) -> list[dict]:
 
 @router.get("/accounts")
 def get_demo_accounts():
-    """Return the demo accounts shown on the member C login screen."""
+    """Return the demo accounts shown on the login screen."""
     return {"accounts": DEMO_ACCOUNTS}
 
 
 @router.post("/seed")
 def seed_demo_data(db: Session = Depends(get_db)):
-    """Create or update demo accounts and encrypted/signed demo documents."""
+    """Create or update company demo accounts and encrypted/signed documents."""
+    _cleanup_seeded_demo_documents(db)
     users = [_ensure_user(db, account) for account in DEMO_ACCOUNTS]
-    admin_user = next(user for user in users if user.username == "admin_demo")
+    admin_user = next(user for user in users if user.username == "ceo")
     documents = _ensure_documents(db, admin_user)
 
     return {
-        "message": "Demo accounts and documents are ready",
+        "message": "Company demo accounts and documents are ready",
         "accounts": DEMO_ACCOUNTS,
         "documents": documents,
     }
@@ -204,12 +266,12 @@ def list_demo_documents(db: Session = Depends(get_db)):
 @router.post("/tamper-simulation")
 def simulate_tamper_detection(db: Session = Depends(get_db)):
     """Record a safe tamper-detection event without modifying encrypted files."""
-    doc = db.query(Document).filter(Document.original_filename == "teacher_answer_key.md").first()
+    doc = db.query(Document).filter(Document.original_filename == "finance_quarterly_summary.md").first()
 
     AuditService.log_event(
         db=db,
         action=AuditAction.TAMPERING_DETECTED.value,
-        username="member_c_demo",
+        username="company_demo",
         resource_type="document",
         resource_id=doc.doc_id if doc else "demo_missing_document",
         details=json.dumps(

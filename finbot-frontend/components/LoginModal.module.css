@@ -106,6 +106,12 @@
     font-size: 13px;
 }
 
+.selectedPanel small {
+    color: #a7b4c7;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
 .selectedPanel button {
     flex: 0 0 auto;
     padding: 10px 12px;

@@ -11,7 +11,7 @@ export default function Home() {
   if (!authReady) {
     return (
       <div className="landing">
-        <h1>FinBot 💼</h1>
+        <h1>FinBot</h1>
         <p>正在连接服务…</p>
       </div>
     );
@@ -21,7 +21,7 @@ export default function Home() {
     <div>
       {!user ? (
         <div className="landing">
-          <h1>FinBot 💼</h1>
+          <h1>FinBot</h1>
           <button onClick={() => setShowModal(true)}>登录</button>
 
           {showModal && <LoginModal onClose={() => setShowModal(false)} />}

@@ -9,7 +9,7 @@ import styles from "./LoginModal.module.css";
 type DemoAccount = (typeof DEMO_ACCOUNTS)[number];
 
 export default function LoginModal({ onClose }: { onClose: () => void }) {
-    const [selectedKey, setSelectedKey] = useState<DemoAccount["key"]>("student");
+    const [selectedKey, setSelectedKey] = useState<DemoAccount["key"]>("employee");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -101,6 +101,7 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
                     <div>
                         <span>已选择身份</span>
                         <strong>{selectedAccount.label}</strong>
+                        <small>演示账号：{selectedAccount.username}</small>
                     </div>
                     <button type="button" onClick={fillDemoAccount} disabled={loading}>
                         填入演示账号
@@ -112,7 +113,7 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
                     <input
                         value={username}
                         onChange={(event) => setUsername(event.target.value)}
-                        placeholder="例如 student_demo"
+                        placeholder="例如 finance_manager"
                         autoComplete="username"
                     />
                 </label>

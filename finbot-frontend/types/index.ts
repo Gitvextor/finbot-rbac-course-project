@@ -13,7 +13,7 @@ export type ChatRole =
     | "c_level";
 
 export interface DemoAccount {
-    key: "admin" | "teacher" | "ta" | "student";
+    key: "executive" | "hr" | "finance" | "engineering" | "marketing" | "employee";
     label: string;
     username: string;
     email: string;

@@ -153,38 +153,54 @@ class ChatRequest(BaseModel):
 LIGHTWEIGHT_ROUTE_KEYWORDS = {
     "engineering": [
         "architecture", "sla", "api", "ci/cd", "cicd", "sprint", "engineering", "工程", "架构",
-        "teacher answer", "answer key", "grading", "rubric", "rbac", "demo", "course", "archive",
-        "教师答案", "答案", "评分", "标准", "课程", "归档", "演示",
+        "system", "service", "deployment", "uptime", "microservice", "backend", "系统", "服务",
+        "部署", "流水线", "技术栈", "微服务",
     ],
     "finance": ["financial", "finance", "budget", "revenue", "profit", "quarterly", "财务", "预算", "收入"],
-    "hr": ["hr", "employee", "salary", "headcount", "leave", "员工", "薪资", "请假"],
+    "hr": ["hr", "employee count", "employees in", "salary", "headcount", "payroll", "performance", "员工统计", "薪资", "绩效"],
     "marketing": ["marketing", "campaign", "lead", "roi", "广告", "市场", "营销"],
-    "general": ["policy", "handbook", "public", "onboarding", "公开", "手册"],
+    "general": ["policy", "handbook", "public", "onboarding", "benefit", "leave policy", "leave application", "work hours", "公开", "手册", "福利", "请假政策"],
 }
 
 
 DEMO_CONTEXTS = {
     "general": {
-        "source": "course_public_syllabus.md",
+        "source": "company_public_handbook.md",
         "text": (
-            "FinBot 是面向课程/考试资料场景的安全 RAG 助手。公开资料包含项目背景、"
-            "演示流程、公开问答范围和学生可访问说明。Student 只能查看公开资料，"
-            "不能访问教师答案、评分标准或隐私数据。"
+            "FinSolve Technologies 是一家服务银行、保险和投资管理客户的 B2B fintech 公司，"
+            "内部资料助手 FinBot 用于安全查询公司知识库。新员工入职流程包括 HR 文件核验、"
+            "IT 账号开通、安全意识培训、直属经理团队介绍，以及 30 天内完成合规模块和 buddy 辅导。"
+            "员工福利包括健康保险、带薪年假、病假、健康支持、学习预算报销和适用的退休缴费。"
+            "请假政策要求通过 HRMS 提交年假申请并由经理审批，病假按需提交证明，紧急假可由经理和 HR 补批。"
+            "标准工作时间为周一至周五 9:30 到 18:30。Employee 只能查看公共资料，不能访问 HR、财务、工程或市场等部门敏感资料。"
         ),
     },
     "engineering": {
-        "source": "teacher_answer_key.md + grading_rubric.md",
+        "source": "engineering_sla_report.md",
         "text": (
-            "教师答案文件仅 Teacher/Admin 可访问。评分标准包括 RBAC 检索层过滤、"
-            "Prompt Injection 防护、PII 防护、文档签名与篡改检测、审计记录展示。"
-            "TA 可访问评分标准和工程说明，但不默认开放教师答案。"
+            "工程资料包含 API uptime SLA、CI/CD 流水线、微服务架构、部署状态和 sprint metrics。"
+            "Engineering 与 Executive 身份可以访问工程资料，其他普通身份应被 RBAC 拦截。"
+        ),
+    },
+    "finance": {
+        "source": "finance_quarterly_summary.md",
+        "text": (
+            "财务资料包含季度收入、预算执行、费用摘要、供应商付款和财务 KPI。"
+            "Finance 与 Executive 身份可以访问财务资料，其他部门默认不可见。"
         ),
     },
     "hr": {
-        "source": "student_privacy_records.csv",
+        "source": "hr_employee_records.csv",
         "text": (
-            "学生隐私记录包含姓名、邮箱、电话和成绩字段，只用于 PII 与权限演示。"
-            "普通 Student 不应看到该资料内容。"
+            "HR 员工记录包含姓名、邮箱、电话、部门等敏感字段，只用于 PII 与权限演示。"
+            "HR 与 Executive 身份可以访问，普通 Employee 不应看到该资料内容。"
+        ),
+    },
+    "marketing": {
+        "source": "marketing_campaign_report.md",
+        "text": (
+            "市场资料包含 campaign performance、leads、cost per lead、conversion channel 和 ROI。"
+            "Marketing 与 Executive 身份可以访问市场资料，其他部门默认不可见。"
         ),
     },
 }

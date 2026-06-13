@@ -62,16 +62,16 @@ main.bat
 
 ### 3. 登录与测试
 
-前端每种成员类型有独立密码（详见 [password.md](password.md)）：
+前端使用公司 RBAC 演示账号（详见 [password.md](password.md)）：
 
-| 角色 | 密码 | 可访问文档库 |
-|------|------|-------------|
-| `c_level` | `ceo@2026` | 全部 |
-| `engineering` | `eng@2026` | 工程 + 公共 |
-| `finance` | `fin@2026` | 财务 + 公共 |
-| `marketing` | `mkt@2026` | 市场 + 公共 |
-| `hr_manager` | `hr@2026` | HR + 公共 |
-| `employee` | `emp@2026` | 仅公共 |
+| 登录身份 | 账号 | 密码 | 可访问文档库 |
+|---------|------|------|-------------|
+| Executive 高管 | `ceo` | `password123` | 全部 |
+| Engineering 工程 | `rd_director` | `password123` | 工程 + 公共 |
+| Finance 财务 | `finance_manager` | `password123` | 财务 + 公共 |
+| Marketing 市场 | `marketing_manager` | `password123` | 市场 + 公共 |
+| HR 经理 | `hr_manager` | `password123` | HR + 公共 |
+| Employee 普通员工 | `employee_demo` | `password123` | 仅公共 |
 
 推荐测试问题见 [question.md](question.md)。
 

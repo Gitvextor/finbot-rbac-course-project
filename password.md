@@ -1,27 +1,20 @@
-登录界面已改好：每种成员类型需要**专属密码**才能登录。
+登录界面已改成公司 RBAC 演示账号：先选择身份，再输入该身份对应的账号和密码。账号不属于所选身份、密码错误、权限字段不匹配，都会拒绝登录。
 
-## 成员密码对照表
+## 演示账号
 
-| 成员类型 | 密码 | 权限 |
-|---------|------|------|
-| 普通员工 `employee` | `emp@2026` | 公共文档 |
-| HR 经理 `hr_manager` | `hr@2026` | HR + 公共 |
-| 财务 `finance` | `fin@2026` | 财务 + 公共 |
-| 市场 `marketing` | `mkt@2026` | 市场 + 公共 |
-| 工程 `engineering` | `eng@2026` | 工程 + 公共 |
-| 高管 `c_level` | `ceo@2026` | 全部部门 |
+| 登录身份 | 账号 | 密码 | 可访问范围 |
+|---------|------|------|------------|
+| Executive 高管 | `ceo` | `password123` | 全公司资料、Risk Dashboard、文档验证 |
+| HR 经理 | `hr_manager` | `password123` | HR 资料 + 公共资料 |
+| Finance 财务 | `finance_manager` | `password123` | 财务资料 + 公共资料 |
+| Engineering 工程 | `rd_director` | `password123` | 工程资料 + 公共资料 |
+| Marketing 市场 | `marketing_manager` | `password123` | 市场资料 + 公共资料 |
+| Employee 普通员工 | `employee_demo` | `password123` | 仅公共资料 |
 
-## 登录方式
+## 演示方式
 
-1. 填写 **用户 ID**（任意，如 `user001`）
-2. 选择 **成员类型**
-3. 输入该类型对应的 **专属密码**
-4. 密码与成员类型不匹配会提示错误
-
-## 改动文件
-
-- `finbot-frontend/lib/memberCredentials.ts` — 成员密码配置
-- `finbot-frontend/components/loginModal.tsx` — 登录界面与校验
-- `finbot-frontend/components/LoginModal.module.css` — 样式
-
-重启前端后生效（或重新运行 `python main.py`）。若要改密码，编辑 `memberCredentials.ts` 即可。
+1. 在登录页选择一个身份，例如 `Finance 财务`。
+2. 输入对应账号，例如 `finance_manager`。
+3. 输入密码 `password123`。
+4. 如果选择 `Finance 财务` 但输入 `employee_demo`，前端会在后端认证成功后继续校验身份并拒绝登录。
+5. 如果密码输错，后端 `/api/auth/login` 会直接拒绝。

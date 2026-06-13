@@ -476,18 +476,20 @@ if (health.boot_id !== localStorage.getItem("finbot_boot_id")) {
 }
 ```
 
-### 10.3 前端登录角色与密码
+### 10.3 前端登录账号与角色映射
 
-| 成员类型 | role 值 | 密码 |
-|---------|---------|------|
-| 普通员工 | `employee` | `emp@2026` |
-| HR 经理 | `hr_manager` | `hr@2026` |
-| 财务 | `finance` | `fin@2026` |
-| 市场 | `marketing` | `mkt@2026` |
-| 工程 | `engineering` | `eng@2026` |
-| 高管 | `c_level` | `ceo@2026` |
+成员C 已将前端登录接到成员A 的 `/api/auth/login`，登录时先选择演示身份，再输入真实后端账号密码。账号权限字段与所选身份不一致会被前端拒绝。
 
-配置：`finbot-frontend/lib/memberCredentials.ts`
+| 登录身份 | 后端账号 | 密码 | chat role |
+|---------|---------|------|-----------|
+| Executive 高管 | `ceo` | `password123` | `c_level` |
+| HR 经理 | `hr_manager` | `password123` | `hr_manager` |
+| Finance 财务 | `finance_manager` | `password123` | `finance` |
+| Marketing 市场 | `marketing_manager` | `password123` | `marketing` |
+| Engineering 工程 | `rd_director` | `password123` | `engineering` |
+| Employee 普通员工 | `employee_demo` | `password123` | `employee` |
+
+配置：`finbot-frontend/lib/memberCredentials.ts`；后端 demo seed：`backend/api/demo.py`
 
 ---
 
@@ -551,7 +553,7 @@ models/                     # 本地 embedding 模型（download_model.py）
 download_model.py
 main.py                     # 一键启动 backend + frontend
 question.md                 # 推荐测试问题
-password.md                 # 前端成员密码
+password.md                 # 公司 RBAC 演示账号
 ```
 
 ---
@@ -583,7 +585,7 @@ password.md                 # 前端成员密码
 - **成员A**：文档上传/下载的 L1–L4 + 部门矩阵（`RBACService`）
 - **成员B**：RAG 问答的 Chat Role → Collection 矩阵（`ROLE_COLLECTIONS`）
 
-成员C 可在最终版中将两者统一映射；当前前端仅使用成员B 的 chat role。
+成员C 已在前端将两者统一映射：登录先走成员A 的 JWT 账号体系，再把账号映射为成员B 的 chat role 传给 `/api/chat`。
 
 ---
 

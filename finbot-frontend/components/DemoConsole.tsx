@@ -8,11 +8,12 @@ import { AuthUser, DocumentRecord, Message } from "@/types";
 import styles from "./DemoConsole.module.css";
 
 const roleScopes: Record<string, string> = {
-    c_level: "可查看全部课程资料与归档",
-    engineering: "可查看教学资料、评分标准与公开资料",
-    hr_manager: "可查看授权的隐私类资料与公开资料",
-    marketing: "可查看公开资料",
-    employee: "只能查看公开课程资料",
+    c_level: "可查看全部公司资料与归档",
+    engineering: "可查看工程与公共资料",
+    finance: "可查看财务与公共资料",
+    hr_manager: "可查看 HR 与公共资料",
+    marketing: "可查看市场与公共资料",
+    employee: "只能查看公共公司资料",
 };
 
 const roleViews: Record<string, {
@@ -22,62 +23,87 @@ const roleViews: Record<string, {
     suggestedQuestions: string[];
     helperText: string;
 }> = {
-    admin: {
-        title: "管理员资料助手",
-        subtitle: "用于总览课程资料、维护归档、查看答案文件、评分标准和系统访问边界。",
-        scope: ["全部资料库", "教师答案", "评分标准", "隐私资料", "公开资料"],
+    executive: {
+        title: "高管资料助手",
+        subtitle: "用于总览公司工程、财务、HR、市场和公共资料。",
+        scope: ["全部资料库", "工程资料", "财务资料", "HR 资料", "市场资料", "公共资料"],
         suggestedQuestions: [
-            "What documents are available in this course archive?",
-            "Summarize the grading rubric for this project",
-            "Explain the RBAC policy for student access",
-            "What should be shown in the final demo?",
-        ],
-        helperText: "Admin 视角用于最终验收：可以确认资料是否齐全，并演示不同角色下可见内容不同。",
-    },
-    teacher: {
-        title: "教师资料助手",
-        subtitle: "用于查询教师答案、评分标准、课程归档和公开说明。",
-        scope: ["教师答案", "评分标准", "课程归档", "公开资料"],
-        suggestedQuestions: [
-            "Summarize the teacher answer key",
-            "What are the grading criteria for this project?",
-            "Which materials can students access?",
-            "Explain how the demo proves RBAC works",
-        ],
-        helperText: "Teacher 可以查看受限教学资料；学生使用同样问题时应被系统拒绝或只返回公开资料。",
-    },
-    ta: {
-        title: "助教资料助手",
-        subtitle: "用于查询评分标准、实现说明、课程归档和公开材料。",
-        scope: ["评分标准", "工程说明", "课程归档", "公开资料"],
-        suggestedQuestions: [
-            "What are the grading criteria for this project?",
+            "What documents are available in the company archive?",
+            "What is the company's total revenue this quarter?",
             "Explain the CI/CD pipeline for the project",
-            "What is the SLA for our API uptime?",
-            "Which parts should be captured in screenshots?",
+            "What is marketing campaign performance?",
         ],
-        helperText: "TA 视角强调评分协助和工程资料，不默认开放教师答案或隐私资料。",
+        helperText: "高管账号可访问全部部门资料，适合演示跨部门检索和审计记录。",
     },
-    student: {
-        title: "学生公开资料助手",
-        subtitle: "用于查询公开课程说明、演示流程和允许学生查看的资料。",
+    hr: {
+        title: "HR 资料助手",
+        subtitle: "用于查询员工数据、招聘计划、入职流程和公共政策。",
+        scope: ["HR 资料", "公共资料"],
+        suggestedQuestions: [
+            "How many employees are in HR?",
+            "What is the onboarding process for new employees?",
+            "What benefits are offered to employees?",
+            "How many types of leave are available?",
+        ],
+        helperText: "HR 账号只能访问 HR 与公共资料；财务、工程、市场资料会被 RBAC 拦截。",
+    },
+    finance: {
+        title: "财务资料助手",
+        subtitle: "用于查询预算、季度报表、费用摘要和公共资料。",
+        scope: ["财务资料", "公共资料"],
+        suggestedQuestions: [
+            "What is the company's total revenue this quarter?",
+            "Show me the profit and loss statement",
+            "What is the operating budget for 2024?",
+            "What are the key financial KPIs?",
+        ],
+        helperText: "财务账号只能访问 Finance 与公共资料；工程、HR、市场资料会被 RBAC 拦截。",
+    },
+    engineering: {
+        title: "工程资料助手",
+        subtitle: "用于查询系统架构、SLA、CI/CD、部署状态和工程指标。",
+        scope: ["工程资料", "公共资料"],
+        suggestedQuestions: [
+            "What is the SLA for our API uptime?",
+            "Explain the CI/CD pipeline for the project",
+            "How does the microservices setup work?",
+            "What are the engineering sprint metrics for 2024?",
+        ],
+        helperText: "工程账号只能访问 Engineering/R&D 与公共资料；财务、HR、市场资料会被 RBAC 拦截。",
+    },
+    marketing: {
+        title: "市场资料助手",
+        subtitle: "用于查询营销活动、获客指标、渠道转化和市场报告。",
+        scope: ["市场资料", "公共资料"],
+        suggestedQuestions: [
+            "What is marketing campaign performance?",
+            "How many leads were generated?",
+            "What is cost per lead?",
+            "Which channels drive conversions?",
+        ],
+        helperText: "市场账号只能访问 Marketing/Sales 与公共资料；其他部门资料会被 RBAC 拦截。",
+    },
+    employee: {
+        title: "员工公开资料助手",
+        subtitle: "用于查询公司公开手册、入职流程、福利和通用政策。",
         scope: ["公开资料"],
         suggestedQuestions: [
-            "What documents can students access?",
-            "What is the course project about?",
-            "How should I use this assistant?",
-            "Summarize the public syllabus",
+            "What is the onboarding process for new employees?",
+            "What benefits are offered to employees?",
+            "What are the standard work hours?",
+            "What is the company leave policy?",
         ],
-        helperText: "Student 只能访问公开资料；答案文件、评分标准和隐私资料会被拒绝。",
+        helperText: "普通员工只能访问公共资料；部门敏感资料会被 RBAC 拦截。",
     },
 };
 
 function getRoleView(user: AuthUser) {
-    const label = user.label?.toLowerCase() ?? "";
-    if (user.is_admin || user.chat_role === "c_level") return roleViews.admin;
-    if (label.includes("teacher")) return roleViews.teacher;
-    if (label.includes("ta")) return roleViews.ta;
-    return roleViews.student;
+    if (user.is_admin || user.chat_role === "c_level") return roleViews.executive;
+    if (user.chat_role === "hr_manager") return roleViews.hr;
+    if (user.chat_role === "finance") return roleViews.finance;
+    if (user.chat_role === "engineering") return roleViews.engineering;
+    if (user.chat_role === "marketing") return roleViews.marketing;
+    return roleViews.employee;
 }
 
 function formatDocumentName(filename: string) {
@@ -99,7 +125,7 @@ export default function DemoConsole() {
         if (!user) return "";
         return `${user.label ?? user.username} / ${user.department} / ${user.level}`;
     }, [user]);
-    const roleView = useMemo(() => (user ? getRoleView(user) : roleViews.student), [user]);
+    const roleView = useMemo(() => (user ? getRoleView(user) : roleViews.employee), [user]);
 
     const loadDocuments = useCallback(async () => {
         if (!user?.token) return;
@@ -241,7 +267,7 @@ export default function DemoConsole() {
                             <article key={document.doc_id} className={styles.archiveCard}>
                                 <strong>{formatDocumentName(document.filename)}</strong>
                                 <span>{document.owner_department} · {document.access_level_required}</span>
-                                <small>{document.description ?? "课程资料"}</small>
+                                <small>{document.description ?? "公司资料"}</small>
                             </article>
                         ))}
                         {!documentsLoading && documents.length === 0 && (
@@ -253,7 +279,7 @@ export default function DemoConsole() {
                 <div className={styles.chatLog}>
                     {messages.length === 0 && (
                         <div className={styles.emptyState}>
-                            选择左侧推荐问题，或直接输入你想查询的课程资料问题。页面会按当前账号权限显示资料归档和回答范围。
+                            选择左侧推荐问题，或直接输入你想查询的公司资料问题。页面会按当前账号权限显示资料归档和回答范围。
                         </div>
                     )}
 

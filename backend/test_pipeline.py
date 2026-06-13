@@ -190,7 +190,18 @@ for query, role, expected_route in normal_queries:
 h1("6. 审计日志检查")
 
 try:
-    r = requests.get(f"{BASE_URL}/api/audit/dashboard", timeout=5)
+    requests.post(f"{BASE_URL}/api/demo/seed", timeout=30)
+    login = requests.post(
+        f"{BASE_URL}/api/auth/login/json",
+        json={"username": "ceo", "password": "password123"},
+        timeout=10,
+    )
+    token = login.json().get("access_token") if login.status_code == 200 else ""
+    r = requests.get(
+        f"{BASE_URL}/api/audit/dashboard",
+        headers={"Authorization": f"Bearer {token}"} if token else {},
+        timeout=5,
+    )
     t("审计仪表盘可访问", r.status_code == 200, f"status={r.status_code}")
 except Exception as exc:
     t("审计仪表盘可访问", False, str(exc))

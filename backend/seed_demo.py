@@ -1,5 +1,5 @@
 """
-Seed member C demo accounts and documents.
+Seed company RBAC demo accounts and documents.
 
 Usage:
     cd backend
@@ -21,7 +21,7 @@ def main() -> None:
     try:
         result = seed_demo_data(db)
         print(result["message"])
-        print("\nDemo credentials:")
+        print("\nCompany demo credentials:")
         for account in DEMO_ACCOUNTS:
             print(
                 f"  {account['label']:<8} "
