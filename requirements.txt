@@ -1,0 +1,32 @@
+ # FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.25
+
+# Security & Cryptography
+cryptography==42.0.0
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]==3.3.0
+
+# RAG dependencies
+langchain==0.1.4
+langchain-community==0.0.17
+langchain-openai
+chromadb==0.4.22
+sentence-transformers==2.3.1
+# LLM: DeepSeek deepseek-v4-flash (OpenAI-compatible SDK)
+openai
+python-dotenv
+
+# File handling
+python-docx==1.1.0
+pypdf==4.0.1
+
+# Utilities
+pydantic==2.5.3
+pydantic-settings==2.1.0
+email-validator==2.1.0
