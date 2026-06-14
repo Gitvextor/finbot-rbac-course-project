@@ -1,14 +1,14 @@
 """
-Bridge member-A document security records with member-B RAG ingestion.
+Bridge member-A encrypted document store with member-B RAG ingestion.
 
-Ensures files under data/ are registered in the encrypted document store,
-signed, and expose verification metadata for Qdrant chunks and /api/chat.
+RAG reads decrypted content from documents/*.enc (via DocumentService).
+The optional data/ folder is only used to bootstrap the encrypted store when empty.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -26,11 +26,18 @@ COLLECTION_DEPARTMENT = {
     "general": ("Public", "L4_Staff"),
 }
 
+DEPARTMENT_TO_COLLECTION = {
+    dept: collection for collection, (dept, _) in COLLECTION_DEPARTMENT.items()
+}
+
+RAG_SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".csv", ".txt"}
+
 DEFAULT_SYNC_OWNER = "ceo"
+INGESTION_SOURCE = "documents"
 
 
 class RAGSourceRegistry:
-    """Sync RAG corpus files with member-A Document records and verification."""
+    """Load verified RAG corpus from member-A encrypted document store."""
 
     def __init__(self) -> None:
         self.doc_service = DocumentService()
@@ -55,13 +62,16 @@ class RAGSourceRegistry:
         )
         return owner
 
+    def department_to_collection(self, department: str) -> Optional[str]:
+        return DEPARTMENT_TO_COLLECTION.get(department)
+
     def sync_data_file(
         self,
         db: Session,
         file_path: Path,
         collection: str,
     ) -> Optional[Document]:
-        """Register or refresh a data/ file in the encrypted document store."""
+        """Bootstrap helper: register a data/ file into the encrypted document store."""
         if not file_path.is_file():
             return None
 
@@ -112,6 +122,34 @@ class RAGSourceRegistry:
         )
         return document
 
+    def bootstrap_from_data(self, db: Session, data_root: Path) -> int:
+        """One-time seed: copy data/ plaintext files into documents/ when corpus is empty."""
+        synced = 0
+        for collection in DEPARTMENT_TO_COLLECTION.values():
+            folder = data_root / collection
+            if not folder.exists():
+                continue
+            for file_path in sorted(folder.iterdir()):
+                if (
+                    file_path.is_file()
+                    and file_path.suffix.lower() in RAG_SUPPORTED_EXTENSIONS
+                ):
+                    if self.sync_data_file(db, file_path, collection):
+                        synced += 1
+        return synced
+
+    def ensure_corpus_bootstrapped(self, db: Session, data_root: Path) -> None:
+        """If encrypted store has no verified RAG docs, seed from data/ once."""
+        if self.list_verified_rag_documents(db):
+            return
+
+        if not data_root.exists():
+            print("[rag] No verified documents in store and data/ is missing.")
+            return
+
+        count = self.bootstrap_from_data(db, data_root)
+        print(f"[rag] Bootstrapped {count} file(s) from data/ into documents/ store.")
+
     def verification_from_document(self, db: Session, doc: Document) -> Dict[str, Any]:
         """Build chunk metadata fields from a Document record."""
         result = self.doc_service.verify_document_integrity(db=db, doc_id=doc.doc_id)
@@ -124,7 +162,63 @@ class RAGSourceRegistry:
             "document_hash": doc.sha256_hash,
             "is_verified": is_verified,
             "signature_valid": signature_valid,
+            "ingestion_source": INGESTION_SOURCE,
         }
+
+    def list_verified_rag_documents(self, db: Session) -> List[Dict[str, Any]]:
+        """Return verified documents mapped to RAG collections."""
+        ingestibles: List[Dict[str, Any]] = []
+        rag_departments = set(DEPARTMENT_TO_COLLECTION.keys())
+
+        documents = (
+            db.query(Document)
+            .filter(Document.target_department.in_(rag_departments))
+            .order_by(Document.original_filename.asc())
+            .all()
+        )
+
+        for doc in documents:
+            collection = self.department_to_collection(doc.target_department)
+            if not collection:
+                continue
+
+            ext = Path(doc.original_filename).suffix.lower()
+            if ext not in RAG_SUPPORTED_EXTENSIONS:
+                continue
+
+            verification = self.verification_from_document(db, doc)
+            if not verification.get("is_verified"):
+                print(
+                    f"[rag] Skip unverified document: {doc.original_filename} ({doc.doc_id})"
+                )
+                continue
+
+            ingestibles.append(
+                {
+                    "document": doc,
+                    "collection": collection,
+                    "verification": verification,
+                }
+            )
+
+        return ingestibles
+
+    def list_verified_csv_documents(
+        self,
+        db: Session,
+        collection: str,
+    ) -> List[Dict[str, Any]]:
+        """Return verified CSV documents for a collection (query-time computation)."""
+        return [
+            item
+            for item in self.list_verified_rag_documents(db)
+            if item["collection"] == collection
+            and Path(item["document"].original_filename).suffix.lower() == ".csv"
+        ]
+
+    def read_decrypted_content(self, db: Session, doc_id: str) -> bytes:
+        content, _ = self.doc_service.read_decrypted_content_for_rag(db, doc_id)
+        return content
 
     def get_verification_metadata(
         self,
@@ -134,7 +228,7 @@ class RAGSourceRegistry:
         sync_path: Optional[Path] = None,
         collection: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Return verification metadata for a RAG source filename."""
+        """Return verification metadata for a source filename."""
         doc = (
             db.query(Document)
             .filter(Document.original_filename == filename)
@@ -150,20 +244,10 @@ class RAGSourceRegistry:
                 "document_hash": None,
                 "is_verified": False,
                 "signature_valid": False,
+                "ingestion_source": INGESTION_SOURCE,
             }
 
         return self.verification_from_document(db, doc)
-
-    def sync_collection(self, db: Session, data_root: Path, collection: str) -> None:
-        """Sync all supported files in a collection directory."""
-        folder = data_root / collection
-        if not folder.exists():
-            return
-
-        supported = {".pdf", ".docx", ".md", ".csv"}
-        for file_path in sorted(folder.iterdir()):
-            if file_path.is_file() and file_path.suffix.lower() in supported:
-                self.sync_data_file(db, file_path, collection)
 
     def verify_doc_for_citation(self, doc_id: str) -> Dict[str, Any]:
         """Re-verify a document before returning it as a chat source."""

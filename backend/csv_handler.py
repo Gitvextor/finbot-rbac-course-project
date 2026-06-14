@@ -77,6 +77,7 @@ def _verification_fields(verification: Optional[Dict[str, Any]] = None) -> Dict[
         "document_hash": verification.get("document_hash"),
         "is_verified": is_verified,
         "signature_valid": signature_valid,
+        "ingestion_source": verification.get("ingestion_source", "documents"),
     }
 
 

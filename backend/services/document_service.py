@@ -208,6 +208,35 @@ class DocumentService:
         db.commit()
         
         return file_content, document
+
+    def read_decrypted_content_for_rag(
+        self,
+        db: Session,
+        doc_id: str,
+    ) -> Tuple[bytes, Document]:
+        """
+        Decrypt document content for RAG ingestion.
+
+        Skips user RBAC checks but enforces integrity verification.
+        """
+        document = db.query(Document).filter(Document.doc_id == doc_id).first()
+        if not document:
+            raise ValueError("Document not found")
+
+        encrypted_filepath = DOCUMENTS_DIR / document.filename
+        if not encrypted_filepath.exists():
+            raise FileNotFoundError(f"Encrypted file not found: {encrypted_filepath}")
+
+        encrypted_package = CryptoUtils.load_encrypted_package(str(encrypted_filepath))
+        file_content = CryptoUtils.decrypt_file(encrypted_package, doc_id)
+
+        current_hash = HashUtils.sha256_file(file_content)
+        if current_hash != document.sha256_hash:
+            raise ValueError(
+                f"Document integrity check failed for {doc_id} — possible tampering"
+            )
+
+        return file_content, document
     
     def verify_document_integrity(
         self,

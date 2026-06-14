@@ -3,6 +3,7 @@
 from docling_core.transforms.chunker import BaseChunk
 import os
 import hashlib
+import tempfile
 import threading
 from pathlib import Path
 from typing import List, Dict, Any
@@ -13,7 +14,6 @@ from csv_handler import (
     parse_csv_to_row_chunks,
     generate_csv_summary_chunks,
     try_csv_computation,
-    get_csv_files_for_collection,
 )
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
@@ -147,6 +147,7 @@ def build_metadata(
         "document_hash": verification.get("document_hash"),
         "is_verified": is_verified,
         "signature_valid": signature_valid,
+        "ingestion_source": verification.get("ingestion_source", "documents"),
     }
 
 
@@ -163,87 +164,76 @@ def load_documents_chunker() -> List[Any]:
             InputFormat.PDF,
             InputFormat.DOCX,
             InputFormat.MD,
-            # CSV removed — handled separately by csv_handler
         ],
         format_options={
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
         },
     )
 
-    collections = list(ROLE_ACCESS.keys())
     registry = RAGSourceRegistry()
     db = SessionLocal()
 
     collection_docs = []
-    csv_chunks = []  # CSV chunks collected separately
+    csv_chunks = []
+    temp_files: List[Path] = []
 
     try:
-        for collection in collections:
-            registry.sync_collection(db, DATA_ROOT, collection)
+        registry.ensure_corpus_bootstrapped(db, DATA_ROOT)
+        ingestibles = registry.list_verified_rag_documents(db)
+        print(f"[load_documents] Ingesting {len(ingestibles)} verified document(s) from documents/ store")
 
-        for collection in collections:
-            folder = DATA_ROOT / collection
+        for item in ingestibles:
+            doc = item["document"]
+            collection = item["collection"]
+            verification = item["verification"]
+            filename = doc.original_filename
+            ext = Path(filename).suffix.lower()
 
-            if not folder.exists():
-                print(f"[load_documents] Skip missing folder: {folder}")
-                continue
-
-            files = [
-                f for f in folder.iterdir()
-                if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-            ]
-
-            for file_path in files:
-                try:
-                    if file_path.suffix.lower() == ".pdf":
-                        print(
-                            f"[load_documents] Skip PDF (requires HuggingFace models): {file_path.name}"
-                        )
-                        continue
-
-                    verification = registry.get_verification_metadata(
-                        db,
-                        file_path.name,
-                        sync_path=file_path,
-                        collection=collection,
+            try:
+                if ext == ".pdf":
+                    print(
+                        f"[load_documents] Skip PDF (requires HuggingFace models): {filename}"
                     )
-                    if not verification.get("is_verified"):
-                        print(
-                            f"[load_documents] Skip unverified source: {file_path.name}"
-                        )
-                        continue
+                    continue
 
-                    # ----- DIVERT: CSV files go through csv_handler -----
-                    if file_path.suffix.lower() == ".csv":
-                        access_roles = ROLE_ACCESS.get(collection, ["all"])
-                        print(f"[load_documents] CSV detected: {file_path.name} → using csv_handler")
+                content = registry.read_decrypted_content(db, doc.doc_id)
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=ext,
+                    prefix=f"rag_{doc.doc_id}_",
+                )
+                temp_file.write(content)
+                temp_file.close()
+                file_path = Path(temp_file.name)
+                temp_files.append(file_path)
 
-                        row_chunks = parse_csv_to_row_chunks(
-                            file_path, collection, access_roles, verification=verification
-                        )
-                        summary_chunks = generate_csv_summary_chunks(
-                            file_path, collection, access_roles, verification=verification
-                        )
-                        csv_chunks.extend(row_chunks)
-                        csv_chunks.extend(summary_chunks)
-                        continue
-                    # ----- END DIVERT -----
+                if ext == ".csv":
+                    access_roles = ROLE_ACCESS.get(collection, ["all"])
+                    print(f"[load_documents] CSV from store: {filename} → csv_handler")
 
-                    result = converter.convert(str(file_path))
+                    row_chunks = parse_csv_to_row_chunks(
+                        file_path, collection, access_roles, verification=verification
+                    )
+                    summary_chunks = generate_csv_summary_chunks(
+                        file_path, collection, access_roles, verification=verification
+                    )
+                    csv_chunks.extend(row_chunks)
+                    csv_chunks.extend(summary_chunks)
+                    continue
 
-                    if file_path.suffix.lower() == ".pdf":
-                        ResultPostprocessor(result).process()
+                result = converter.convert(str(file_path))
+                if ext == ".pdf":
+                    ResultPostprocessor(result).process()
 
-                    collection_docs.append({
-                        "filename": file_path.name,
-                        "doc": result.document,
-                        "collection": collection,
-                        "verification": verification,
-                    })
+                collection_docs.append({
+                    "filename": filename,
+                    "doc": result.document,
+                    "collection": collection,
+                    "verification": verification,
+                })
 
-
-                except Exception as exc:
-                    print(f"[load_documents] ERROR loading {file_path.name}: {exc}")
+            except Exception as exc:
+                print(f"[load_documents] ERROR loading {filename}: {exc}")
     finally:
         db.close()
 
@@ -279,6 +269,12 @@ def load_documents_chunker() -> List[Any]:
 
     # Merge CSV chunks with document chunks
     all_chunks.extend(csv_chunks)
+
+    for temp_path in temp_files:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     print("Chunking done...")
     if len(all_chunks) > 100:
@@ -448,13 +444,17 @@ def collection_has_verification_metadata(client: QdrantClient) -> bool:
         return True
 
     payload = points[0].payload or {}
-    return "is_verified" in payload and "doc_id" in payload
+    return (
+        "is_verified" in payload
+        and "doc_id" in payload
+        and payload.get("ingestion_source") == "documents"
+    )
 
 
 def ensure_verified_collection(client: QdrantClient, embedder: SentenceTransformer) -> None:
     with _COLLECTION_BUILD_LOCK:
         if collection_exists(client) and not collection_has_verification_metadata(client):
-            print("[rag] Rebuilding Qdrant collection with source verification metadata...")
+            print("[rag] Rebuilding Qdrant collection (documents/ ingestion)...")
             client.delete_collection(COLLECTION_NAME)
 
         if not collection_exists(client):
@@ -478,33 +478,40 @@ def answer(query:str, stream:str, role:str)->tuple[str | Dict[str, list[str]], L
     csv_computed_context = None
     csv_source_meta = None
     if stream == "hr":
-        csv_files = get_csv_files_for_collection(DATA_ROOT, "hr")
         registry = RAGSourceRegistry()
         db = SessionLocal()
         try:
-            for csv_path in csv_files:
-                verification = registry.get_verification_metadata(
-                    db,
-                    csv_path.name,
-                    sync_path=csv_path,
-                    collection="hr",
-                )
-                if not verification.get("is_verified"):
-                    continue
+            for item in registry.list_verified_csv_documents(db, "hr"):
+                doc = item["document"]
+                verification = item["verification"]
+                csv_path: Path | None = None
+                try:
+                    content = registry.read_decrypted_content(db, doc.doc_id)
+                    temp_file = tempfile.NamedTemporaryFile(
+                        delete=False,
+                        suffix=".csv",
+                        prefix=f"rag_csv_{doc.doc_id}_",
+                    )
+                    temp_file.write(content)
+                    temp_file.close()
+                    csv_path = Path(temp_file.name)
 
-                success, result = try_csv_computation(query, csv_path)
-                if success:
-                    csv_computed_context = result
-                    csv_source_meta = {
-                        "source": f"[Source: {csv_path.name} (computed from verified database)]",
-                        "doc_id": verification.get("doc_id"),
-                        "document_hash": verification.get("document_hash"),
-                        "is_verified": verification.get("is_verified"),
-                        "signature_valid": verification.get("signature_valid"),
-                        "verified": True,
-                    }
-                    print(f"[answer] CSV computation succeeded: {result}")
-                    break
+                    success, result = try_csv_computation(query, csv_path)
+                    if success:
+                        csv_computed_context = result
+                        csv_source_meta = {
+                            "source": f"[Source: {doc.original_filename} (computed from verified database)]",
+                            "doc_id": verification.get("doc_id"),
+                            "document_hash": verification.get("document_hash"),
+                            "is_verified": verification.get("is_verified"),
+                            "signature_valid": verification.get("signature_valid"),
+                            "verified": True,
+                        }
+                        print(f"[answer] CSV computation succeeded: {result}")
+                        break
+                finally:
+                    if csv_path is not None:
+                        csv_path.unlink(missing_ok=True)
         finally:
             db.close()
     # ----- END DIVERT -----
