@@ -102,7 +102,7 @@ class DocumentService:
         )
         
         # Sign document if requested
-        if sign_document and owner.is_admin or access_level_required in [User.level for User in [User]]:
+        if sign_document:
             try:
                 signature_package = sign_document_package(doc_id, file_hash, self.private_key)
                 document.is_signed = True
@@ -111,8 +111,7 @@ class DocumentService:
                 document.signed_at = datetime.utcnow()
                 document.is_verified = True
             except Exception as e:
-                # Continue without signature if it fails
-                pass
+                print(f"[DocumentService] Signing failed for {doc_id}: {e}")
         
         db.add(document)
         

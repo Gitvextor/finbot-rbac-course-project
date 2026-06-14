@@ -100,12 +100,6 @@ def detect_pii(text: str):
 
 
 # ---------------------------------------------------------------------------
-# Encoder
-# ---------------------------------------------------------------------------
-encoder = HuggingFaceEncoder(name=ROUTER_MODEL)
-
-
-# ---------------------------------------------------------------------------
 # Route Definitions
 # ---------------------------------------------------------------------------
 engineering = Route(
@@ -270,16 +264,6 @@ routes = [
 
 
 # ---------------------------------------------------------------------------
-# Router Instance
-# ---------------------------------------------------------------------------
-rl = SemanticRouter(
-    encoder=encoder,
-    routes=routes,
-    auto_sync="local",
-)
-
-
-# ---------------------------------------------------------------------------
 # Guardrail Wrapper
 # ---------------------------------------------------------------------------
 OFF_TOPIC_REPLY = (
@@ -335,9 +319,37 @@ class SimpleSemanticRouterGuardrail:
 
 
 # ---------------------------------------------------------------------------
-# Singleton Instance
+# Encoder / Router (lazy init — avoids blocking login & auth on startup)
 # ---------------------------------------------------------------------------
-guardrail = SimpleSemanticRouterGuardrail(rl)
+_encoder = None
+_router_instance = None
+_guardrail_instance = None
+
+
+def _get_encoder() -> HuggingFaceEncoder:
+    global _encoder
+    if _encoder is None:
+        print("[router] Loading semantic router encoder...")
+        _encoder = HuggingFaceEncoder(name=ROUTER_MODEL)
+    return _encoder
+
+
+def _get_router() -> SemanticRouter:
+    global _router_instance
+    if _router_instance is None:
+        _router_instance = SemanticRouter(
+            encoder=_get_encoder(),
+            routes=routes,
+            auto_sync="local",
+        )
+    return _router_instance
+
+
+def _get_guardrail() -> SimpleSemanticRouterGuardrail:
+    global _guardrail_instance
+    if _guardrail_instance is None:
+        _guardrail_instance = SimpleSemanticRouterGuardrail(_get_router())
+    return _guardrail_instance
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +363,7 @@ def route_query(query: str, session_id: str = None) -> str:
         ValueError → if blocked
     """
     print(f"Received query: '{query}'")
-    route_name, blocked, reply = guardrail(query, session_id)
+    route_name, blocked, reply = _get_guardrail()(query, session_id)
     print(f"Routed to: '{route_name}', Blocked: {blocked}")
 
     if blocked:

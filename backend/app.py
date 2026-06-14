@@ -108,6 +108,6 @@ def query_endpoint(body: QueryRequest, request: Request):
     # -------------------------------
     # RAG Pipeline
     # -------------------------------
-    ans, context = retrieve_answer(body.query, route, body.role)
+    ans, context, _source_metas = retrieve_answer(body.query, route, body.role)
 
     return {"answer": ans}

@@ -84,6 +84,12 @@ else:
     t("未阻塞", not resp.get("blocked", True), f"blocked={resp.get('blocked')}")
     t("有答案", bool(resp.get("answer")), f"answer length={len(str(resp.get('answer','')))}")
     t("有来源", len(resp.get("sources", [])) > 0, f"sources={len(resp.get('sources',[]))}")
+    if resp.get("sources"):
+        t(
+            "来源已验证",
+            all(source.get("verified") for source in resp.get("sources", [])),
+            str(resp.get("sources")),
+        )
     t("有路由", resp.get("route") not in (None, "", "blocked"), f"route={resp.get('route')}")
 
     print(f"\n     路由: {resp.get('route')}")

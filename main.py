@@ -23,6 +23,7 @@ BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIR = ROOT / "finbot-frontend"
 
 BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_HEALTH_URL = f"{BACKEND_URL}/health"
 FRONTEND_URL = "http://localhost:3000"
 BACKEND_PORT = 8000
 FRONTEND_PORT = 3000
@@ -172,7 +173,15 @@ def main() -> None:
             env={"FINBOT_RELOAD": "0"},
         )
     )
-    time.sleep(2)
+
+    log(f"Waiting for backend at {BACKEND_HEALTH_URL} (may take up to 120s on first run)...")
+    if not wait_for_url(BACKEND_HEALTH_URL, timeout_sec=120):
+        stop_all()
+        raise SystemExit(
+            "Backend did not become ready in time. "
+            "Check backend logs for Python/ML import errors."
+        )
+
     processes.append(spawn("frontend", [npm, "run", "dev"], FRONTEND_DIR))
     threading.Thread(target=open_frontend_when_ready, daemon=True).start()
 

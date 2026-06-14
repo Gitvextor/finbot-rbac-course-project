@@ -3,6 +3,7 @@
 from docling_core.transforms.chunker import BaseChunk
 import os
 import hashlib
+import threading
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -48,6 +49,8 @@ from config import (
 )
 
 from output_guardrails import OutputGuardrails
+from database import SessionLocal
+from services.rag_source_registry import RAGSourceRegistry
 
 
 # -------------------------------
@@ -58,6 +61,8 @@ BACKEND_DIR = Path(__file__).parent
 DATA_ROOT = BACKEND_DIR.parent / "data"
 
 load_dotenv(BACKEND_DIR / ".env")
+
+_COLLECTION_BUILD_LOCK = threading.Lock()
 
 
 def get_llm_client() -> OpenAI:
@@ -100,7 +105,13 @@ def generate_chunk_id(text: str, source_document: str) -> str:
     return hashlib.md5((text + source_document).encode()).hexdigest()
 
 
-def build_metadata(chunk:BaseChunk, access_roles:List[str], collection:str, source_document:str) -> Dict[str, Any]:
+def build_metadata(
+    chunk: BaseChunk,
+    access_roles: List[str],
+    collection: str,
+    source_document: str,
+    verification: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     meta = chunk.meta
 
     page_number = None
@@ -119,6 +130,10 @@ def build_metadata(chunk:BaseChunk, access_roles:List[str], collection:str, sour
     if meta.headings:
         section_title = meta.headings[-1]
 
+    verification = verification or {}
+    is_verified = bool(verification.get("is_verified"))
+    signature_valid = bool(verification.get("signature_valid"))
+
     return {
         "chunk_id": generate_chunk_id(chunk.text, source_document),
         "source_document": source_document,
@@ -128,6 +143,10 @@ def build_metadata(chunk:BaseChunk, access_roles:List[str], collection:str, sour
         "page_number": page_number,
         "chunk_type": chunk_type,
         "parent_chunk_id": parent_chunk_id,
+        "doc_id": verification.get("doc_id"),
+        "document_hash": verification.get("document_hash"),
+        "is_verified": is_verified,
+        "signature_valid": signature_valid,
     }
 
 
@@ -152,56 +171,81 @@ def load_documents_chunker() -> List[Any]:
     )
 
     collections = list(ROLE_ACCESS.keys())
+    registry = RAGSourceRegistry()
+    db = SessionLocal()
 
     collection_docs = []
     csv_chunks = []  # CSV chunks collected separately
 
-    for collection in collections:
-        folder = DATA_ROOT / collection
+    try:
+        for collection in collections:
+            registry.sync_collection(db, DATA_ROOT, collection)
 
-        if not folder.exists():
-            print(f"[load_documents] Skip missing folder: {folder}")
-            continue
+        for collection in collections:
+            folder = DATA_ROOT / collection
 
-        files = [
-            f for f in folder.iterdir()
-            if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-        ]
+            if not folder.exists():
+                print(f"[load_documents] Skip missing folder: {folder}")
+                continue
 
-        for file_path in files:
-            try:
-                if file_path.suffix.lower() == ".pdf":
-                    print(
-                        f"[load_documents] Skip PDF (requires HuggingFace models): {file_path.name}"
+            files = [
+                f for f in folder.iterdir()
+                if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+            ]
+
+            for file_path in files:
+                try:
+                    if file_path.suffix.lower() == ".pdf":
+                        print(
+                            f"[load_documents] Skip PDF (requires HuggingFace models): {file_path.name}"
+                        )
+                        continue
+
+                    verification = registry.get_verification_metadata(
+                        db,
+                        file_path.name,
+                        sync_path=file_path,
+                        collection=collection,
                     )
-                    continue
+                    if not verification.get("is_verified"):
+                        print(
+                            f"[load_documents] Skip unverified source: {file_path.name}"
+                        )
+                        continue
 
-                # ----- DIVERT: CSV files go through csv_handler -----
-                if file_path.suffix.lower() == ".csv":
-                    access_roles = ROLE_ACCESS.get(collection, ["all"])
-                    print(f"[load_documents] CSV detected: {file_path.name} → using csv_handler")
+                    # ----- DIVERT: CSV files go through csv_handler -----
+                    if file_path.suffix.lower() == ".csv":
+                        access_roles = ROLE_ACCESS.get(collection, ["all"])
+                        print(f"[load_documents] CSV detected: {file_path.name} → using csv_handler")
 
-                    row_chunks = parse_csv_to_row_chunks(file_path, collection, access_roles)
-                    summary_chunks = generate_csv_summary_chunks(file_path, collection, access_roles)
-                    csv_chunks.extend(row_chunks)
-                    csv_chunks.extend(summary_chunks)
-                    continue
-                # ----- END DIVERT -----
+                        row_chunks = parse_csv_to_row_chunks(
+                            file_path, collection, access_roles, verification=verification
+                        )
+                        summary_chunks = generate_csv_summary_chunks(
+                            file_path, collection, access_roles, verification=verification
+                        )
+                        csv_chunks.extend(row_chunks)
+                        csv_chunks.extend(summary_chunks)
+                        continue
+                    # ----- END DIVERT -----
 
-                result = converter.convert(str(file_path))
+                    result = converter.convert(str(file_path))
 
-                if file_path.suffix.lower() == ".pdf":
-                    ResultPostprocessor(result).process()
+                    if file_path.suffix.lower() == ".pdf":
+                        ResultPostprocessor(result).process()
 
-                collection_docs.append({
-                    "filename": file_path.name,
-                    "doc": result.document,
-                    "collection": collection
-                })
+                    collection_docs.append({
+                        "filename": file_path.name,
+                        "doc": result.document,
+                        "collection": collection,
+                        "verification": verification,
+                    })
 
 
-            except Exception as exc:
-                print(f"[load_documents] ERROR loading {file_path.name}: {exc}")
+                except Exception as exc:
+                    print(f"[load_documents] ERROR loading {file_path.name}: {exc}")
+    finally:
+        db.close()
 
 
     # -------------------------------
@@ -214,6 +258,7 @@ def load_documents_chunker() -> List[Any]:
         doc = item["doc"]
         filename = item["filename"]
         collection = item["collection"]
+        verification = item["verification"]
 
         chunks = chunker.chunk(doc)
 
@@ -224,6 +269,7 @@ def load_documents_chunker() -> List[Any]:
                 access_roles=ROLE_ACCESS.get(collection, ["all"]),
                 collection=collection,
                 source_document=filename,
+                verification=verification,
             )
 
             all_chunks.append({
@@ -269,6 +315,12 @@ def collect_all_chunks_qdrant(chunks:List[Dict[str, Any]], client:QdrantClient, 
         field_schema=models.PayloadSchemaType.KEYWORD,
     )
 
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="is_verified",
+        field_schema=models.PayloadSchemaType.BOOL,
+    )
+
     points = [
         PointStruct(
             id=chunk["metadata"]["chunk_id"],
@@ -301,7 +353,7 @@ def retrieve_and_context(
     client: QdrantClient,
     embedder: SentenceTransformer,
     stream: str,
-) -> tuple[str, List[str], List[str]]:
+) -> tuple[str, List[str], List[str], List[Dict[str, Any]]]:
     query_vector = embedder.encode(query).tolist()
 
     def _query(collection: str | None = None, collections: List[str] | None = None):
@@ -309,7 +361,11 @@ def retrieve_and_context(
             FieldCondition(
                 key="access_roles",
                 match=MatchValue(value=role),
-            )
+            ),
+            FieldCondition(
+                key="is_verified",
+                match=MatchValue(value=True),
+            ),
         ]
         if collection:
             conditions.append(
@@ -345,63 +401,121 @@ def retrieve_and_context(
         results = _query(collections=allowed)
 
     parts = []
-
     citations = []
+    source_metas = []
 
     for i, point in enumerate(results.points, 1):
         payload = point.payload
-
-        parts.append(
-            f"[Source {i} | {payload.get('source_document')} | Page {payload.get('page_number')}]\n"
-            f"{payload.get('text')}"
-        )
-
-        citations.append(
+        source_line = (
             f"[Source {i} | {payload.get('source_document')} | Page {payload.get('page_number')}]"
         )
 
+        parts.append(
+            f"{source_line}\n"
+            f"{payload.get('text')}"
+        )
+
+        citations.append(source_line)
+        source_metas.append(
+            {
+                "source": source_line,
+                "doc_id": payload.get("doc_id"),
+                "document_hash": payload.get("document_hash"),
+                "is_verified": payload.get("is_verified"),
+                "signature_valid": payload.get("signature_valid"),
+                "verified": bool(payload.get("is_verified") and payload.get("signature_valid")),
+            }
+        )
+
     context = "\n\n".join(parts)
-    return context, parts, citations
+    return context, parts, citations, source_metas
 
 def collection_exists(client:QdrantClient)->bool:
     collections = client.get_collections().collections
     return any(c.name == COLLECTION_NAME for c in collections)
 
+
+def collection_has_verification_metadata(client: QdrantClient) -> bool:
+    if not collection_exists(client):
+        return False
+
+    points, _ = client.scroll(
+        collection_name=COLLECTION_NAME,
+        limit=1,
+        with_payload=True,
+    )
+    if not points:
+        return True
+
+    payload = points[0].payload or {}
+    return "is_verified" in payload and "doc_id" in payload
+
+
+def ensure_verified_collection(client: QdrantClient, embedder: SentenceTransformer) -> None:
+    with _COLLECTION_BUILD_LOCK:
+        if collection_exists(client) and not collection_has_verification_metadata(client):
+            print("[rag] Rebuilding Qdrant collection with source verification metadata...")
+            client.delete_collection(COLLECTION_NAME)
+
+        if not collection_exists(client):
+            print("Collection does not exist, creating new collection...")
+            chunks = load_documents_chunker()
+            collect_all_chunks_qdrant(chunks, client, embedder)
+
 # -------------------------------
 # Main RAG Pipeline
 # -------------------------------
 @traceable(name="RAG Answer Pipeline")
-def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
+def answer(query:str, stream:str, role:str)->tuple[str | Dict[str, list[str]], List[str], List[Dict[str, Any]]]:
     
     client = get_qdrant_client()
 
     embedder = SentenceTransformer(SENTENCE_TRANSFORMER_LLM)
 
-    if not collection_exists(client):
-        #chunks = load_documents_chunker(stream)
-        print("Collection does not exist, creating new collection...")
-        chunks = load_documents_chunker()
-        collect_all_chunks_qdrant(chunks, client, embedder)
+    ensure_verified_collection(client, embedder)
 
     # ----- DIVERT: For HR route, try pandas computation first -----
     csv_computed_context = None
+    csv_source_meta = None
     if stream == "hr":
         csv_files = get_csv_files_for_collection(DATA_ROOT, "hr")
-        for csv_path in csv_files:
-            success, result = try_csv_computation(query, csv_path)
-            if success:
-                csv_computed_context = result
-                print(f"[answer] CSV computation succeeded: {result}")
-                break
+        registry = RAGSourceRegistry()
+        db = SessionLocal()
+        try:
+            for csv_path in csv_files:
+                verification = registry.get_verification_metadata(
+                    db,
+                    csv_path.name,
+                    sync_path=csv_path,
+                    collection="hr",
+                )
+                if not verification.get("is_verified"):
+                    continue
+
+                success, result = try_csv_computation(query, csv_path)
+                if success:
+                    csv_computed_context = result
+                    csv_source_meta = {
+                        "source": f"[Source: {csv_path.name} (computed from verified database)]",
+                        "doc_id": verification.get("doc_id"),
+                        "document_hash": verification.get("document_hash"),
+                        "is_verified": verification.get("is_verified"),
+                        "signature_valid": verification.get("signature_valid"),
+                        "verified": True,
+                    }
+                    print(f"[answer] CSV computation succeeded: {result}")
+                    break
+        finally:
+            db.close()
     # ----- END DIVERT -----
 
-    context, context_chunks, citations = retrieve_and_context(
+    context, context_chunks, citations, source_metas = retrieve_and_context(
         query, role, client, embedder, stream
     )
 
     if not context.strip() and not csv_computed_context:
         print(f"[answer] No retrieved context for role={role}, stream={stream}")
-        return NO_CONTEXT_MESSAGE, context_chunks
+        return NO_CONTEXT_MESSAGE, context_chunks, source_metas
 
     llm_client = get_llm_client()
 
@@ -419,18 +533,17 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
 
         print("response_llm: ", response)
 
-        # Skip output guardrails for CSV-computed answers
-        # (grounding/citation checks are designed for document-based retrieval, not computed data)
         final_response = response.choices[0].message.content
 
-        # Add CSV-specific citation
         final_response += "\n\n## 引用来源\n\n"
-        final_response += "- `[Source: hr_data.csv (computed from database)]`\n"
+        if csv_source_meta:
+            final_response += f"- `{csv_source_meta['source']}`\n"
+            source_metas = [csv_source_meta] + source_metas
         for citation in citations:
             final_response += f"- `{citation}`\n"
 
         print('final_response: ', final_response)
-        return final_response, context_chunks
+        return final_response, context_chunks, source_metas
 
     # ----- Normal RAG flow (no CSV computation) -----
     user_message = (
@@ -457,4 +570,4 @@ def answer(query:str, stream:str, role:str)->Dict[str, list[str]]:
 
     print('final_response: ', final_response)
 
-    return final_response, context_chunks
+    return final_response, context_chunks, source_metas

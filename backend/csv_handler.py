@@ -68,10 +68,23 @@ def _generate_chunk_id(text: str, source: str) -> str:
     return hashlib.md5((text + source).encode()).hexdigest()
 
 
+def _verification_fields(verification: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    verification = verification or {}
+    is_verified = bool(verification.get("is_verified"))
+    signature_valid = bool(verification.get("signature_valid"))
+    return {
+        "doc_id": verification.get("doc_id"),
+        "document_hash": verification.get("document_hash"),
+        "is_verified": is_verified,
+        "signature_valid": signature_valid,
+    }
+
+
 def parse_csv_to_row_chunks(
     file_path: Path,
     collection: str,
     access_roles: List[str],
+    verification: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Read a CSV file and convert each row into a text chunk
@@ -96,6 +109,7 @@ def parse_csv_to_row_chunks(
                 "page_number": None,
                 "chunk_type": "csv_row",
                 "parent_chunk_id": None,
+                **_verification_fields(verification),
             },
         })
 
@@ -111,6 +125,7 @@ def generate_csv_summary_chunks(
     file_path: Path,
     collection: str,
     access_roles: List[str],
+    verification: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Generate pre-computed summary chunks grouped by department,
@@ -140,7 +155,7 @@ def generate_csv_summary_chunks(
         f"Employment type distribution: {df['employment_type'].value_counts().to_dict()}. "
         f"Employment status distribution: {df['employment_status'].value_counts().to_dict()}."
     )
-    summaries.append(_make_summary_chunk(overall, filename, collection, access_roles, "Overall HR Summary"))
+    summaries.append(_make_summary_chunk(overall, filename, collection, access_roles, "Overall HR Summary", verification))
 
     # --- Per-department summaries ---
     for dept, group in df.groupby("department"):
@@ -156,7 +171,7 @@ def generate_csv_summary_chunks(
             f"Designation levels: {group['designation_level'].value_counts().to_dict()}. "
             f"Locations: {group['location'].value_counts().to_dict()}."
         )
-        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Department Summary: {dept}"))
+        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Department Summary: {dept}", verification))
 
     # --- Per-location summaries ---
     for loc, group in df.groupby("location"):
@@ -167,7 +182,7 @@ def generate_csv_summary_chunks(
             f"Average salary: ₹{int(group['salary'].mean()):,}. "
             f"Average performance rating: {group['performance_rating'].mean():.2f}."
         )
-        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Location Summary: {loc}"))
+        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Location Summary: {loc}", verification))
 
     # --- Per-gender summaries ---
     for gender, group in df.groupby("gender"):
@@ -178,7 +193,7 @@ def generate_csv_summary_chunks(
             f"Average salary: ₹{int(group['salary'].mean()):,}. "
             f"Average performance rating: {group['performance_rating'].mean():.2f}."
         )
-        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Gender Summary: {gender}"))
+        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Gender Summary: {gender}", verification))
 
     # --- Per designation-level summaries ---
     for level, group in df.groupby("designation_level"):
@@ -189,7 +204,7 @@ def generate_csv_summary_chunks(
             f"Average salary: ₹{int(group['salary'].mean()):,}. "
             f"Average performance rating: {group['performance_rating'].mean():.2f}."
         )
-        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Designation Summary: {level}"))
+        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Designation Summary: {level}", verification))
 
     # --- Per department + gender cross-tabulation ---
     for (dept, gender), group in df.groupby(["department", "gender"]):
@@ -198,7 +213,7 @@ def generate_csv_summary_chunks(
             f"Average salary: ₹{int(group['salary'].mean()):,}. "
             f"Average performance rating: {group['performance_rating'].mean():.2f}."
         )
-        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Dept-Gender: {dept} - {gender}"))
+        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Dept-Gender: {dept} - {gender}", verification))
 
     # --- Per department + designation cross-tabulation ---
     for (dept, role), group in df.groupby(["department", "role"]):
@@ -208,7 +223,7 @@ def generate_csv_summary_chunks(
             f"Average performance rating: {group['performance_rating'].mean():.2f}. "
             f"Average leave balance: {group['leave_balance'].mean():.1f}."
         )
-        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Role Summary: {dept} - {role}"))
+        summaries.append(_make_summary_chunk(text, filename, collection, access_roles, f"Role Summary: {dept} - {role}", verification))
 
     print(f"[csv_handler] Generated {len(summaries)} summary chunks from {filename}")
     return summaries
@@ -220,6 +235,7 @@ def _make_summary_chunk(
     collection: str,
     access_roles: List[str],
     section_title: str,
+    verification: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "text": text,
@@ -232,6 +248,7 @@ def _make_summary_chunk(
             "page_number": None,
             "chunk_type": "csv_summary",
             "parent_chunk_id": None,
+            **_verification_fields(verification),
         },
     }
 

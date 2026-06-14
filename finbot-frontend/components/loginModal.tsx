@@ -38,7 +38,12 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
         setError("");
 
         try {
-            await seedDemoData();
+            try {
+                await seedDemoData();
+            } catch (seedErr) {
+                console.warn("Demo seed skipped:", seedErr);
+            }
+
             const user = await loginDemoUser(
                 username.trim(),
                 password,

@@ -32,7 +32,7 @@ def evaluation():
 
         route = route_query(question, None)
 
-        ans, context_chunks = answer(question, route, "c_level")
+        ans, context_chunks, _source_metas = answer(question, route, "c_level")
 
         rows.append({
             "question": question,

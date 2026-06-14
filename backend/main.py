@@ -36,26 +36,47 @@ from config import (
     RAG_SYSTEM_PROMPT,
 )
 from models.audit_log import AuditAction
+from services.rag_source_registry import RAGSourceRegistry
 
-# ── RAG pipeline imports (成员B) ──
-try:
-    from router import route_query as do_route_query
-    from rag import answer as rag_answer
-    RAG_AVAILABLE = True
-except Exception as e:
-    RAG_AVAILABLE = False
-    RAG_IMPORT_ERROR = str(e)
-    print(f"[WARNING] RAG pipeline not available: {e}")
+# ── RAG pipeline: lazy load (login/auth should not wait for ML models) ──
+RAG_AVAILABLE: bool | None = None
+RAG_IMPORT_ERROR = ""
+_do_route_query = None
+_rag_answer = None
+
+
+def _ensure_rag_pipeline() -> bool:
+    """Import heavy RAG modules on first chat request, not at server startup."""
+    global RAG_AVAILABLE, RAG_IMPORT_ERROR, _do_route_query, _rag_answer
+    if RAG_AVAILABLE is not None:
+        return RAG_AVAILABLE
+
+    try:
+        from router import route_query as route_query_fn
+        from rag import answer as answer_fn
+
+        _do_route_query = route_query_fn
+        _rag_answer = answer_fn
+        RAG_AVAILABLE = True
+        print("[RAG] Pipeline loaded successfully.")
+    except Exception as exc:
+        RAG_AVAILABLE = False
+        RAG_IMPORT_ERROR = str(exc)
+        print(f"[WARNING] RAG pipeline not available: {exc}")
+
+    return RAG_AVAILABLE
 
 SERVER_BOOT_ID = str(uuid.uuid4())
 
 
 def _rag_service_status() -> str:
-    if RAG_AVAILABLE:
+    if RAG_AVAILABLE is True:
         return "available"
-    if os.getenv("DEEPSEEK_API_KEY"):
-        return "deepseek_context_fallback"
-    return "unavailable"
+    if RAG_AVAILABLE is False:
+        if os.getenv("DEEPSEEK_API_KEY"):
+            return "deepseek_context_fallback"
+        return "unavailable"
+    return "idle"
 
 
 @asynccontextmanager
@@ -65,7 +86,7 @@ async def lifespan(app: FastAPI):
     init_db()
     print("Database initialized successfully!")
     print(f"Starting Secure Corporate RAG Assistant...")
-    print(f"RAG pipeline: {'AVAILABLE' if RAG_AVAILABLE else 'UNAVAILABLE'}")
+    print(f"RAG pipeline: {_rag_service_status()}")
     print(f"API will be available at http://{API_HOST}:{API_PORT}")
     yield
     print("Shutting down...")
@@ -376,6 +397,7 @@ def _fallback_chat_response(body: ChatRequest):
         True,
         details=fallback_note,
     )
+    fallback_sources = _verified_sources_for_label(source_label, context_item["source"])
     return {
         "role": body.role,
         "route": route,
@@ -383,7 +405,7 @@ def _fallback_chat_response(body: ChatRequest):
         "blocked": False,
         "guardrail_triggered": False,
         "answer": answer_text,
-        "sources": [{"source": source_label, "verified": True}],
+        "sources": fallback_sources,
         "fallback_mode": True,
     }
 
@@ -406,13 +428,13 @@ def chat_endpoint(body: ChatRequest, request: Request):
             content={"detail": "query is required"},
         )
 
-    if not RAG_AVAILABLE:
+    if not _ensure_rag_pipeline():
         return _fallback_chat_response(body)
 
     # ── 1. Input guardrails: Prompt Injection + PII ──
     try:
         sid = body.session_id or _extract_session_id(request)
-        route = do_route_query(body.query, sid)
+        route = _do_route_query(body.query, sid)
     except ValueError as guardrail_err:
         reason = str(guardrail_err)
         _log_query_audit(
@@ -458,7 +480,7 @@ def chat_endpoint(body: ChatRequest, request: Request):
 
     # ── 3. RAG answer generation ──
     try:
-        ans, context_chunks = rag_answer(body.query, route, body.role)
+        ans, context_chunks, source_metas = _rag_answer(body.query, route, body.role)
     except Exception as exc:
         traceback.print_exc()
         return JSONResponse(
@@ -469,8 +491,10 @@ def chat_endpoint(body: ChatRequest, request: Request):
             },
         )
 
-    # ── 4. Source verification ──
-    sources = _extract_sources(context_chunks)
+    # ── 4. Source verification (member-A integrity + signature) ──
+    registry = RAGSourceRegistry()
+    sources = registry.build_verified_sources(source_metas)
+    sources = [source for source in sources if source.get("verified")]
 
     # ── 5. Audit logging ──
     _log_query_audit(
@@ -502,21 +526,40 @@ def _extract_session_id(request: Request) -> str:
     )
 
 
+def _verified_sources_for_label(source_label: str, filename: str) -> list:
+    """Resolve fallback/demo source labels through member-A verification."""
+    db = SessionLocal()
+    try:
+        registry = RAGSourceRegistry()
+        verification = registry.get_verification_metadata(db, filename)
+        source_metas = [
+            {
+                "source": source_label,
+                "doc_id": verification.get("doc_id"),
+                "document_hash": verification.get("document_hash"),
+                "signature_valid": verification.get("signature_valid"),
+                "verified": bool(
+                    verification.get("is_verified") and verification.get("signature_valid")
+                ),
+            }
+        ]
+        verified = registry.build_verified_sources(source_metas)
+        return [source for source in verified if source.get("verified")]
+    finally:
+        db.close()
+
+
 def _extract_sources(context_chunks: list) -> list:
-    """Parse source metadata from RAG context chunks."""
+    """Legacy parser kept for compatibility with older callers."""
     sources = []
     seen = set()
     for chunk in context_chunks:
-        # chunk is a formatted string like "[Source 1 | file.pdf | Page 3]\ntext..."
         if chunk.startswith("[Source"):
             line = chunk.split("\n")[0]
             key = line.strip()
             if key not in seen:
                 seen.add(key)
-                sources.append({
-                    "source": line,
-                    "verified": False,  # not verified through member-A's signature system
-                })
+                sources.append({"source": line, "verified": False})
     return sources
 
 
