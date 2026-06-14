@@ -2,7 +2,10 @@ import {
     AuthUser,
     ChatResponse,
     DocumentRecord,
+    RagIndexStatus,
     RiskDashboard,
+    SignDocumentResponse,
+    UploadDocumentResponse,
     VerifyResult,
 } from "@/types";
 
@@ -109,6 +112,76 @@ export async function getAccessibleDocuments(token: string) {
         cache: "no-store",
     });
     return parseResponse<DocumentRecord[]>(res);
+}
+
+export async function uploadDocument(
+    token: string,
+    file: File,
+    options: {
+        targetDepartment: string;
+        accessLevelRequired?: string;
+        description?: string;
+        signDocument?: boolean;
+    },
+): Promise<UploadDocumentResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("target_department", options.targetDepartment);
+    formData.append("access_level_required", options.accessLevelRequired ?? "L4_Staff");
+    if (options.description) {
+        formData.append("description", options.description);
+    }
+    formData.append("sign_document", String(options.signDocument ?? true));
+
+    const res = await fetch(`${API_URL}/api/documents/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+    return parseResponse<UploadDocumentResponse>(res);
+}
+
+export async function getPendingSignatureDocuments(token: string) {
+    const res = await fetch(`${API_URL}/api/documents/pending-signature`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+    });
+    return parseResponse<DocumentRecord[]>(res);
+}
+
+export async function signDocument(token: string, docId: string, force = false) {
+    const res = await fetch(
+        `${API_URL}/api/documents/${docId}/sign?force=${force ? "true" : "false"}`,
+        {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+        },
+    );
+    return parseResponse<SignDocumentResponse>(res);
+}
+
+export async function getRagIndexStatus(token: string) {
+    const res = await fetch(`${API_URL}/api/rag/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+    });
+    return parseResponse<RagIndexStatus>(res);
+}
+
+export async function reindexRag(token: string, background = true) {
+    const res = await fetch(`${API_URL}/api/rag/reindex?background=${background}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return parseResponse<RagIndexStatus & { message: string }>(res);
+}
+
+export async function deleteDocument(token: string, docId: string) {
+    const res = await fetch(`${API_URL}/api/documents/${docId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return parseResponse<{ message: string; success: boolean; rag_index_scheduled?: boolean }>(res);
 }
 
 export async function verifyDocument(docId: string, token: string) {

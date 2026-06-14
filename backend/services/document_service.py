@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import DOCUMENTS_DIR, KEYS_DIR, RSA_PRIVATE_KEY_FILE, RSA_PUBLIC_KEY_FILE, PERMISSION_MATRIX, LEVEL_HIERARCHY
 from models import User, Document, AuditLog, AuditAction, RiskLevel
+from .rbac_service import RBACService
 from security import (
     CryptoUtils, HashUtils, SignatureUtils, 
     ensure_keypair_exists, sign_document_package, 
@@ -465,9 +466,14 @@ class DocumentService:
         if not document:
             raise ValueError("Document not found")
         
-        # Check permissions (only owner or admin can delete)
-        if document.owner_id != user.id and not user.is_admin:
-            raise PermissionError("Only document owner or admin can delete")
+        if not RBACService.can_delete_document(user, document):
+            raise PermissionError(
+                "Not authorized to delete this document. "
+                "Managers may delete their department only; executives may delete all."
+            )
+        
+        target_department = document.target_department
+        was_verified = document.is_verified
         
         # Delete encrypted file
         encrypted_filepath = DOCUMENTS_DIR / document.filename
@@ -488,5 +494,9 @@ class DocumentService:
         # Delete record
         db.delete(document)
         db.commit()
+
+        from rag_index_service import refresh_rag_if_eligible
+
+        refresh_rag_if_eligible(target_department, was_verified)
         
         return True

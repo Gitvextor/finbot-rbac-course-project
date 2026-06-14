@@ -101,6 +101,10 @@ class RBACService:
     @staticmethod
     def can_upload_to_department(user: User, department: str) -> bool:
         """Check if user can upload documents to target department"""
+        # Everyone can contribute to the public / general collection
+        if department == "Public":
+            return True
+
         # Only admin and executive can upload to any department
         if user.is_admin or user.level == "L1_Executive":
             return True
@@ -113,10 +117,15 @@ class RBACService:
         if user.level == "L3_Manager":
             return user.department == department
         
-        # Staff can only upload to Public
-        if user.level == "L4_Staff":
-            return department == "Public"
-        
+        return False
+    
+    @staticmethod
+    def can_delete_document(user: User, document: Document) -> bool:
+        """Executives/admins may delete any document; managers only their department."""
+        if user.is_admin or user.level == "L1_Executive":
+            return True
+        if user.level == "L3_Manager":
+            return document.target_department == user.department
         return False
     
     @staticmethod
@@ -143,6 +152,16 @@ class RBACService:
         return False
     
     @staticmethod
+    def _uploadable_departments(user: User) -> List[str]:
+        """Departments the user may upload documents to."""
+        departments = ["Public"]
+        if user.is_admin or user.level == "L1_Executive":
+            return list(RBACService.DEPARTMENT_NAMES.keys())
+        if user.level in ["L2_Director", "L3_Manager"] and user.department not in departments:
+            departments.append(user.department)
+        return departments
+
+    @staticmethod
     def get_permission_matrix_for_user(user: User) -> dict:
         """Get human-readable permission summary for user"""
         return {
@@ -155,9 +174,14 @@ class RBACService:
             },
             "permissions": {
                 "can_access_departments": RBACService.get_accessible_departments(user),
-                "can_upload_to": ["Public"] if user.level == "L4_Staff" else 
-                                ([user.department] if user.level in ["L2_Director", "L3_Manager"] else 
-                                 list(RBACService.DEPARTMENT_NAMES.keys())),
+                "can_upload_to": RBACService._uploadable_departments(user),
+                "can_delete_documents": (
+                    "all"
+                    if user.is_admin or user.level == "L1_Executive"
+                    else user.department
+                    if user.level == "L3_Manager"
+                    else "none"
+                ),
                 "can_sign_documents": RBACService.can_sign_documents(user),
                 "can_manage_users": RBACService.can_manage_users(user),
                 "can_view_audit_logs": RBACService.can_view_audit_logs(user)

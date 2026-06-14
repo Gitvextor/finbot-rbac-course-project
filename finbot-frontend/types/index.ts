@@ -65,6 +65,30 @@ export interface DocumentRecord {
     description?: string;
 }
 
+export interface RagIndexStatus {
+    collection_exists: boolean;
+    rebuild_running: boolean;
+    last_result?: {
+        status: string;
+        chunks?: number;
+        message?: string;
+    } | null;
+    last_error?: string | null;
+}
+
+export interface UploadDocumentResponse {
+    message: string;
+    document: DocumentRecord;
+    metadata: Record<string, unknown>;
+    rag_index_scheduled?: boolean;
+}
+
+export interface SignDocumentResponse {
+    message: string;
+    document: DocumentRecord;
+    rag_index_scheduled?: boolean;
+}
+
 export interface VerifyResult {
     doc_id: string;
     filename: string;

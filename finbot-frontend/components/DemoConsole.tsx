@@ -1,10 +1,11 @@
 "use client";
 
-import { KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { KeyboardEvent, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import DocumentPanel from "./DocumentPanel";
 import { useAuth } from "../context/AuthContext";
-import { getAccessibleDocuments, sendQuery } from "../lib/api";
-import { AuthUser, DocumentRecord, Message } from "@/types";
+import { sendQuery } from "../lib/api";
+import { AuthUser, Message } from "@/types";
 import styles from "./DemoConsole.module.css";
 
 const roleScopes: Record<string, string> = {
@@ -106,19 +107,10 @@ function getRoleView(user: AuthUser) {
     return roleViews.employee;
 }
 
-function formatDocumentName(filename: string) {
-    return filename
-        .replace(/\.(md|csv|txt|pdf|docx)$/i, "")
-        .replaceAll("_", " ");
-}
-
 export default function DemoConsole() {
     const { user, logout } = useAuth();
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
-    const [documents, setDocuments] = useState<DocumentRecord[]>([]);
-    const [documentsLoading, setDocumentsLoading] = useState(false);
-    const [documentsError, setDocumentsError] = useState("");
     const [loading, setLoading] = useState(false);
 
     const roleText = useMemo(() => {
@@ -126,24 +118,6 @@ export default function DemoConsole() {
         return `${user.label ?? user.username} / ${user.department} / ${user.level}`;
     }, [user]);
     const roleView = useMemo(() => (user ? getRoleView(user) : roleViews.employee), [user]);
-
-    const loadDocuments = useCallback(async () => {
-        if (!user?.token) return;
-        setDocumentsLoading(true);
-        setDocumentsError("");
-        try {
-            const result = await getAccessibleDocuments(user.token);
-            setDocuments(result);
-        } catch (err) {
-            setDocumentsError(err instanceof Error ? err.message : "无法读取资料归档");
-        } finally {
-            setDocumentsLoading(false);
-        }
-    }, [user?.token]);
-
-    useEffect(() => {
-        void loadDocuments();
-    }, [loadDocuments]);
 
     if (!user) return null;
 
@@ -251,30 +225,7 @@ export default function DemoConsole() {
                     </button>
                 </header>
 
-                <section className={styles.archivePanel}>
-                    <div className={styles.archiveHeader}>
-                        <div>
-                            <h3>资料归档</h3>
-                            <p>这里显示当前账号通过 RBAC 后实际可见的资料。</p>
-                        </div>
-                        <button onClick={() => void loadDocuments()} disabled={documentsLoading}>
-                            {documentsLoading ? "刷新中..." : "刷新"}
-                        </button>
-                    </div>
-                    {documentsError && <p className={styles.inlineError}>{documentsError}</p>}
-                    <div className={styles.archiveGrid}>
-                        {documents.map((document) => (
-                            <article key={document.doc_id} className={styles.archiveCard}>
-                                <strong>{formatDocumentName(document.filename)}</strong>
-                                <span>{document.owner_department} · {document.access_level_required}</span>
-                                <small>{document.description ?? "公司资料"}</small>
-                            </article>
-                        ))}
-                        {!documentsLoading && documents.length === 0 && (
-                            <p className={styles.emptyArchive}>当前身份暂无可见归档资料。</p>
-                        )}
-                    </div>
-                </section>
+                <DocumentPanel user={user} />
 
                 <div className={styles.chatLog}>
                     {messages.length === 0 && (
@@ -294,6 +245,9 @@ export default function DemoConsole() {
                                     <span>{message.meta.blocked ? "已拒绝" : "已回答"}</span>
                                     <span>路由：{message.meta.route || "-"}</span>
                                     <span>来源：{message.meta.sources?.length ?? 0}</span>
+                                    {message.meta.sources?.some((s) => s.verified) && (
+                                        <span>已验证来源</span>
+                                    )}
                                 </div>
                             )}
                         </article>

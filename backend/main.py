@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 load_dotenv(Path(__file__).parent / ".env")
 
 from database import init_db, SessionLocal
-from api import auth_router, documents_router, audit_router, rbac_router, demo_router
+from api import auth_router, documents_router, audit_router, rbac_router, demo_router, rag_admin_router
 from config import (
     API_HOST, API_PORT,
     DEEPSEEK_API_BASE,
@@ -158,6 +158,7 @@ app.include_router(documents_router)
 app.include_router(audit_router)
 app.include_router(rbac_router)
 app.include_router(demo_router)
+app.include_router(rag_admin_router)
 
 
 # ═══════════════════════════════════════════════════════════════

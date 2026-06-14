@@ -15,6 +15,8 @@ from database import get_db
 from services import DocumentService, AuditService, get_current_active_user, RBACService
 from models import User, Document
 from .models import DocumentResponse, DocumentMetadata, DocumentVerifyResponse, AccessCheckResponse
+from rag_index_service import refresh_rag_if_eligible
+from services.rag_source_registry import DEPARTMENT_TO_COLLECTION
 
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
@@ -66,11 +68,14 @@ async def upload_document(
             description=description,
             sign_document=sign_document and RBACService.can_sign_documents(current_user)
         )
+
+        refresh_rag_if_eligible(document.target_department, document.is_verified)
         
         return {
             "message": "Document uploaded successfully",
             "document": document.to_dict(),
-            "metadata": metadata
+            "metadata": metadata,
+            "rag_index_scheduled": document.is_verified,
         }
     
     except Exception as e:
@@ -88,6 +93,31 @@ def list_documents(
     """List all documents accessible to current user"""
     doc_service = DocumentService()
     documents = doc_service.list_accessible_documents(db, current_user)
+    return [doc.to_dict() for doc in documents]
+
+
+@router.get("/pending-signature", response_model=List[DocumentResponse])
+def list_pending_signature_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """List RAG-eligible documents awaiting executive signature."""
+    if not RBACService.can_sign_documents(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to review pending signatures",
+        )
+
+    rag_departments = list(DEPARTMENT_TO_COLLECTION.keys())
+    documents = (
+        db.query(Document)
+        .filter(
+            Document.target_department.in_(rag_departments),
+            Document.is_signed.is_(False),
+        )
+        .order_by(Document.created_at.desc())
+        .all()
+    )
     return [doc.to_dict() for doc in documents]
 
 
@@ -225,9 +255,11 @@ def sign_document(
             signer=current_user,
             force=force
         )
+        refresh_rag_if_eligible(document.target_department, document.is_verified)
         return {
             "message": "Document signed successfully",
-            "document": document.to_dict(include_signature=True)
+            "document": document.to_dict(include_signature=True),
+            "rag_index_scheduled": document.is_verified,
         }
     
     except ValueError as e:
@@ -248,7 +280,7 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Delete a document (owner or admin only)"""
+    """Delete a document (executives: all; managers: own department only)"""
     doc_service = DocumentService()
     
     try:
@@ -257,7 +289,11 @@ def delete_document(
             doc_id=doc_id,
             user=current_user
         )
-        return {"message": "Document deleted successfully", "success": success}
+        return {
+            "message": "Document deleted successfully",
+            "success": success,
+            "rag_index_scheduled": success,
+        }
     
     except ValueError as e:
         raise HTTPException(

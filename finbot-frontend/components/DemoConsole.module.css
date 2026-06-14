@@ -289,6 +289,226 @@
     font-weight: 700;
 }
 
+.inlineNotice {
+    margin: 0 0 10px;
+    color: #047857;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.uploadForm {
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    padding: 14px;
+    background: #eff6ff;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.uploadForm h4,
+.pendingPanel h4 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.uploadGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.uploadField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: #334155;
+}
+
+.uploadFieldWide {
+    grid-column: 1 / -1;
+}
+
+.uploadField input,
+.uploadField select {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px;
+    font: inherit;
+    background: #ffffff;
+}
+
+.uploadButton {
+    align-self: flex-start;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.uploadButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.uploadHint {
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.pendingPanel {
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 14px;
+    background: #fffbeb;
+    margin-bottom: 16px;
+}
+
+.pendingHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.pendingList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pendingCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 12px;
+    background: #ffffff;
+}
+
+.pendingCard strong {
+    display: block;
+    color: #0f172a;
+}
+
+.pendingCard span {
+    display: block;
+    color: #b45309;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pendingCard small {
+    display: block;
+    color: #64748b;
+}
+
+.pendingCard button {
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 12px;
+    background: #d97706;
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pendingCard button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.pendingActions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.deleteButton {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.deleteButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.archiveCard .deleteButton {
+    align-self: flex-start;
+    margin-top: 4px;
+}
+
+.badgeRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.badgeSecure,
+.badgeSigned,
+.badgeVerified,
+.badgePending,
+.badgeMuted,
+.statusBadge,
+.statusBadgeOk {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.badgeSecure {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.badgeSigned {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.badgeVerified {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.badgePending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.badgeMuted {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.statusBadge {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.statusBadgeOk {
+    background: #dcfce7;
+    color: #166534;
+}
+
 .workspace {
     min-height: calc(100vh - 48px);
     display: flex;
