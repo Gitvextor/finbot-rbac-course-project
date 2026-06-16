@@ -163,6 +163,7 @@ function AuditDashboard({ token }: { token: string }) {
     }, [loadDashboard]);
 
     const summary = dashboard?.summary;
+    const recentEvents = dashboard?.recent_events ?? dashboard?.critical_events ?? [];
 
     return (
         <div className={styles.workspace}>
@@ -189,15 +190,15 @@ function AuditDashboard({ token }: { token: string }) {
                 </article>
                 <article className={styles.metric}>
                     <span>Prompt Attacks</span>
-                    <strong>{summary?.attack_count ?? 0}</strong>
+                    <strong>{summary?.attack_count ?? summary?.suspicious_events ?? 0}</strong>
                 </article>
                 <article className={styles.metric}>
                     <span>Unauthorized</span>
-                    <strong>{summary?.unauthorized_access_count ?? 0}</strong>
+                    <strong>{summary?.unauthorized_access_count ?? summary?.failed_events ?? 0}</strong>
                 </article>
                 <article className={styles.metric}>
                     <span>Tamper Alerts</span>
-                    <strong>{summary?.tamper_detection_count ?? 0}</strong>
+                    <strong>{summary?.tamper_detection_count ?? summary?.critical_events ?? 0}</strong>
                 </article>
             </div>
 
@@ -225,7 +226,7 @@ function AuditDashboard({ token }: { token: string }) {
                     )}
                 </div>
                 <div className={styles.eventList}>
-                    {dashboard?.recent_events.map((event) => (
+                    {recentEvents.map((event) => (
                         <article key={event.id}>
                             <strong>{formatActionLabel(event.action)}</strong>
                             <span>{event.username ?? "system"}</span>
@@ -235,7 +236,7 @@ function AuditDashboard({ token }: { token: string }) {
                             </small>
                         </article>
                     ))}
-                    {!loading && dashboard?.recent_events.length === 0 && (
+                    {!loading && recentEvents.length === 0 && (
                         <p className={styles.emptyArchive}>暂无最近安全事件。</p>
                     )}
                     {loading && !dashboard && <p className={styles.loading}>正在加载 dashboard...</p>}

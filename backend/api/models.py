@@ -106,8 +106,9 @@ class RiskDashboard(BaseModel):
     summary: dict
     by_action: dict
     by_risk_level: dict
-    top_active_users: List[dict]
-    critical_events: List[dict]
+    top_active_users: List[dict] = Field(default_factory=list)
+    critical_events: List[dict] = Field(default_factory=list)
+    recent_events: List[dict] = Field(default_factory=list)
 
 
 # RBAC models

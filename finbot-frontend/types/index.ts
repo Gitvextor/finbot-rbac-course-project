@@ -106,15 +106,20 @@ export interface RiskDashboard {
     period: string;
     generated_at: string;
     summary: {
-        attack_count: number;
-        sensitive_query_count: number;
-        unauthorized_access_count: number;
-        tamper_detection_count: number;
+        attack_count?: number;
+        sensitive_query_count?: number;
+        unauthorized_access_count?: number;
+        tamper_detection_count?: number;
         total_events: number;
+        failed_events?: number;
+        suspicious_events?: number;
+        critical_events?: number;
     };
     by_action: Record<string, number>;
     by_risk_level: Record<string, number>;
-    recent_events: AuditEvent[];
+    recent_events?: AuditEvent[];
+    critical_events?: AuditEvent[];
+    top_active_users?: { username?: string | null; events: number }[];
 }
 
 export interface AuditEvent {

@@ -185,6 +185,26 @@ class AuditService:
             AuditLog.timestamp >= since,
             AuditLog.risk_level == RiskLevel.CRITICAL.value
         ).order_by(desc(AuditLog.timestamp)).limit(10).all()
+
+        # Presentation dashboard counters
+        def count_action(action: str) -> int:
+            return (
+                db.query(func.count(AuditLog.id))
+                .filter(AuditLog.timestamp >= since, AuditLog.action == action)
+                .scalar()
+                or 0
+            )
+
+        attack_count = count_action(AuditAction.PROMPT_INJECTION_BLOCKED.value)
+        sensitive_count = count_action(AuditAction.PII_BLOCKED.value)
+        unauthorized_count = count_action(AuditAction.UNAUTHORIZED_ACCESS.value) + count_action(
+            AuditAction.ACCESS_DENIED.value
+        )
+        tamper_count = count_action(AuditAction.TAMPERING_DETECTED.value)
+
+        recent_events = db.query(AuditLog).filter(
+            AuditLog.timestamp >= since
+        ).order_by(desc(AuditLog.timestamp)).limit(12).all()
         
         return {
             "period": f"Last {hours} hours",
@@ -193,12 +213,17 @@ class AuditService:
                 "total_events": total_events or 0,
                 "failed_events": failed_events or 0,
                 "suspicious_events": suspicious_events or 0,
-                "critical_events": len(critical_events)
+                "critical_events": len(critical_events),
+                "attack_count": attack_count,
+                "sensitive_query_count": sensitive_count,
+                "unauthorized_access_count": unauthorized_count,
+                "tamper_detection_count": tamper_count,
             },
             "by_action": {action: count for action, count in action_counts},
             "by_risk_level": {risk: count for risk, count in risk_counts},
             "top_active_users": [{"username": u, "events": c} for u, c in top_users],
-            "critical_events": [e.to_dict() for e in critical_events]
+            "critical_events": [e.to_dict() for e in critical_events],
+            "recent_events": [e.to_dict() for e in recent_events],
         }
     
     @staticmethod
