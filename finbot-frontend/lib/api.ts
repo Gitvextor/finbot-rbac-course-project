@@ -197,8 +197,9 @@ export async function simulateTamper() {
     return parseResponse<{ blocked: boolean; status: string; message: string; document?: DocumentRecord }>(res);
 }
 
-export async function getRiskDashboard(hours = 24) {
-    const res = await fetch(`${API_URL}/api/demo/risk-dashboard?hours=${hours}`, {
+export async function getRiskDashboard(token: string, hours = 24) {
+    const res = await fetch(`${API_URL}/api/audit/dashboard?hours=${hours}`, {
+        headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
     });
     return parseResponse<RiskDashboard>(res);

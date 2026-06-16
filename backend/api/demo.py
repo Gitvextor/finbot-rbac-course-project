@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import DOCUMENTS_DIR
 from database import get_db
 from models import AuditAction, AuditLog, Document, User
-from services import AuditService, AuthService, DocumentService
+from services import AuditService, AuthService, DocumentService, require_admin
 
 
 router = APIRouter(prefix="/api/demo", tags=["Company Demo"])
@@ -298,8 +298,9 @@ def simulate_tamper_detection(db: Session = Depends(get_db)):
 def get_demo_risk_dashboard(
     hours: int = Query(24, ge=1, le=720),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),  # noqa: ARG001
 ):
-    """Return presentation-ready security metrics without requiring admin JWT."""
+    """Return presentation-ready security metrics for executive/admin users."""
     since = datetime.utcnow() - timedelta(hours=hours)
 
     def count_action(action: str) -> int:

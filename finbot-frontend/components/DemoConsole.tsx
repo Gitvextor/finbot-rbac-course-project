@@ -1,11 +1,11 @@
 "use client";
 
-import { KeyboardEvent, useMemo, useState } from "react";
+import { KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import DocumentPanel from "./DocumentPanel";
 import { useAuth } from "../context/AuthContext";
-import { sendQuery } from "../lib/api";
-import { AuthUser, Message } from "@/types";
+import { getRiskDashboard, sendQuery } from "../lib/api";
+import { AuthUser, Message, RiskDashboard } from "@/types";
 import styles from "./DemoConsole.module.css";
 
 const roleScopes: Record<string, string> = {
@@ -107,11 +107,150 @@ function getRoleView(user: AuthUser) {
     return roleViews.employee;
 }
 
+function formatActionLabel(action: string) {
+    return action.replaceAll("_", " ");
+}
+
+function formatEventTime(timestamp: string) {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return timestamp;
+    return date.toLocaleString();
+}
+
+function DashboardBarRows({ values }: { values: Record<string, number> }) {
+    const entries = Object.entries(values).sort((a, b) => b[1] - a[1]);
+    const max = Math.max(...entries.map(([, count]) => count), 1);
+
+    if (entries.length === 0) {
+        return <p className={styles.emptyArchive}>暂无统计事件。</p>;
+    }
+
+    return (
+        <>
+            {entries.map(([label, count]) => (
+                <div className={styles.barRow} key={label}>
+                    <span>{formatActionLabel(label)}</span>
+                    <div>
+                        <i style={{ width: `${Math.max((count / max) * 100, 6)}%` }} />
+                    </div>
+                    <strong>{count}</strong>
+                </div>
+            ))}
+        </>
+    );
+}
+
+function AuditDashboard({ token }: { token: string }) {
+    const [dashboard, setDashboard] = useState<RiskDashboard | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    const loadDashboard = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const result = await getRiskDashboard(token, 24);
+            setDashboard(result);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "无法加载 dashboard");
+        } finally {
+            setLoading(false);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        void loadDashboard();
+    }, [loadDashboard]);
+
+    const summary = dashboard?.summary;
+
+    return (
+        <div className={styles.workspace}>
+            <header className={styles.sectionHeader}>
+                <div>
+                    <p className={styles.eyebrow}>Audit & Risk Dashboard</p>
+                    <h2>安全事件仪表盘</h2>
+                </div>
+                <button onClick={() => void loadDashboard()} disabled={loading}>
+                    {loading ? "刷新中..." : "刷新"}
+                </button>
+            </header>
+
+            {error && (
+                <p className={styles.inlineError}>
+                    Dashboard 暂不可用：请确认后端通过根目录 python main.py 或 backend/main.py 启动。
+                </p>
+            )}
+
+            <div className={styles.metricGrid}>
+                <article className={styles.metric}>
+                    <span>Total Events</span>
+                    <strong>{summary?.total_events ?? 0}</strong>
+                </article>
+                <article className={styles.metric}>
+                    <span>Prompt Attacks</span>
+                    <strong>{summary?.attack_count ?? 0}</strong>
+                </article>
+                <article className={styles.metric}>
+                    <span>Unauthorized</span>
+                    <strong>{summary?.unauthorized_access_count ?? 0}</strong>
+                </article>
+                <article className={styles.metric}>
+                    <span>Tamper Alerts</span>
+                    <strong>{summary?.tamper_detection_count ?? 0}</strong>
+                </article>
+            </div>
+
+            <div className={styles.dashboardColumns}>
+                <section>
+                    <h3>Events + Alerts</h3>
+                    <DashboardBarRows values={dashboard?.by_action ?? {}} />
+                </section>
+                <section>
+                    <h3>Risk Levels</h3>
+                    <DashboardBarRows values={dashboard?.by_risk_level ?? {}} />
+                </section>
+            </div>
+
+            <section className={styles.archivePanel}>
+                <div className={styles.archiveHeader}>
+                    <div>
+                        <h3>Recent Security Events</h3>
+                        <p>{dashboard?.period ?? "Last 24 hours"}</p>
+                    </div>
+                    {dashboard?.generated_at && (
+                        <span className={styles.statusBadgeOk}>
+                            {formatEventTime(dashboard.generated_at)}
+                        </span>
+                    )}
+                </div>
+                <div className={styles.eventList}>
+                    {dashboard?.recent_events.map((event) => (
+                        <article key={event.id}>
+                            <strong>{formatActionLabel(event.action)}</strong>
+                            <span>{event.username ?? "system"}</span>
+                            <small>
+                                {event.risk_level} · {event.success ? "success" : "blocked"} ·{" "}
+                                {formatEventTime(event.timestamp)}
+                            </small>
+                        </article>
+                    ))}
+                    {!loading && dashboard?.recent_events.length === 0 && (
+                        <p className={styles.emptyArchive}>暂无最近安全事件。</p>
+                    )}
+                    {loading && !dashboard && <p className={styles.loading}>正在加载 dashboard...</p>}
+                </div>
+            </section>
+        </div>
+    );
+}
+
 export default function DemoConsole() {
     const { user, logout } = useAuth();
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(false);
+    const [activeView, setActiveView] = useState<"assistant" | "dashboard">("assistant");
 
     const roleText = useMemo(() => {
         if (!user) return "";
@@ -120,6 +259,8 @@ export default function DemoConsole() {
     const roleView = useMemo(() => (user ? getRoleView(user) : roleViews.employee), [user]);
 
     if (!user) return null;
+
+    const canViewDashboard = user.is_admin || user.chat_role === "c_level";
 
     const submitQuery = async (query = input) => {
         if (!query.trim() || loading) return;
@@ -179,6 +320,25 @@ export default function DemoConsole() {
                     <small>{roleScopes[user.chat_role] ?? "按当前身份访问资料"}</small>
                 </div>
 
+                {canViewDashboard && (
+                    <nav className={styles.tabs} aria-label="高管视图">
+                        <button
+                            type="button"
+                            className={activeView === "assistant" ? styles.activeTab : ""}
+                            onClick={() => setActiveView("assistant")}
+                        >
+                            Secure RAG Chat
+                        </button>
+                        <button
+                            type="button"
+                            className={activeView === "dashboard" ? styles.activeTab : ""}
+                            onClick={() => setActiveView("dashboard")}
+                        >
+                            Audit & Risk Dashboard
+                        </button>
+                    </nav>
+                )}
+
                 <section className={styles.scopePanel}>
                     <h2>当前可见范围</h2>
                     <div>
@@ -215,58 +375,64 @@ export default function DemoConsole() {
             </aside>
 
             <section className={styles.assistantContent}>
-                <header className={styles.assistantHeader}>
-                    <div>
-                        <p className={styles.eyebrow}>Secure RAG Chat</p>
-                        <h2>{roleView.title}</h2>
-                    </div>
-                    <button onClick={() => setMessages([])} disabled={messages.length === 0}>
-                        清空对话
-                    </button>
-                </header>
+                {activeView === "dashboard" && canViewDashboard ? (
+                    <AuditDashboard token={user.token} />
+                ) : (
+                    <>
+                        <header className={styles.assistantHeader}>
+                            <div>
+                                <p className={styles.eyebrow}>Secure RAG Chat</p>
+                                <h2>{roleView.title}</h2>
+                            </div>
+                            <button onClick={() => setMessages([])} disabled={messages.length === 0}>
+                                清空对话
+                            </button>
+                        </header>
 
-                <DocumentPanel user={user} />
+                        <DocumentPanel user={user} />
 
-                <div className={styles.chatLog}>
-                    {messages.length === 0 && (
-                        <div className={styles.emptyState}>
-                            选择左侧推荐问题，或直接输入你想查询的公司资料问题。页面会按当前账号权限显示资料归档和回答范围。
-                        </div>
-                    )}
-
-                    {messages.map((message, index) => (
-                        <article
-                            key={`${message.role}-${index}`}
-                            className={`${styles.message} ${message.role === "user" ? styles.userMessage : ""}`}
-                        >
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
-                            {message.meta && (
-                                <div className={styles.metaStrip}>
-                                    <span>{message.meta.blocked ? "已拒绝" : "已回答"}</span>
-                                    <span>路由：{message.meta.route || "-"}</span>
-                                    <span>来源：{message.meta.sources?.length ?? 0}</span>
-                                    {message.meta.sources?.some((s) => s.verified) && (
-                                        <span>已验证来源</span>
-                                    )}
+                        <div className={styles.chatLog}>
+                            {messages.length === 0 && (
+                                <div className={styles.emptyState}>
+                                    选择左侧推荐问题，或直接输入你想查询的公司资料问题。页面会按当前账号权限显示资料归档和回答范围。
                                 </div>
                             )}
-                        </article>
-                    ))}
 
-                    {loading && <p className={styles.loading}>正在检索资料并生成回答...</p>}
-                </div>
+                            {messages.map((message, index) => (
+                                <article
+                                    key={`${message.role}-${index}`}
+                                    className={`${styles.message} ${message.role === "user" ? styles.userMessage : ""}`}
+                                >
+                                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                                    {message.meta && (
+                                        <div className={styles.metaStrip}>
+                                            <span>{message.meta.blocked ? "已拒绝" : "已回答"}</span>
+                                            <span>路由：{message.meta.route || "-"}</span>
+                                            <span>来源：{message.meta.sources?.length ?? 0}</span>
+                                            {message.meta.sources?.some((s) => s.verified) && (
+                                                <span>已验证来源</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </article>
+                            ))}
 
-                <div className={styles.composer}>
-                    <textarea
-                        value={input}
-                        onChange={(event) => setInput(event.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="输入问题，Enter 发送，Shift+Enter 换行"
-                    />
-                    <button onClick={() => void submitQuery()} disabled={loading || !input.trim()}>
-                        发送
-                    </button>
-                </div>
+                            {loading && <p className={styles.loading}>正在检索资料并生成回答...</p>}
+                        </div>
+
+                        <div className={styles.composer}>
+                            <textarea
+                                value={input}
+                                onChange={(event) => setInput(event.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder="输入问题，Enter 发送，Shift+Enter 换行"
+                            />
+                            <button onClick={() => void submitQuery()} disabled={loading || !input.trim()}>
+                                发送
+                            </button>
+                        </div>
+                    </>
+                )}
             </section>
         </main>
     );

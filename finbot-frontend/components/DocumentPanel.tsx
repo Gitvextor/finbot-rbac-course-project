@@ -63,6 +63,7 @@ export default function DocumentPanel({ user }: DocumentPanelProps) {
     const [signingId, setSigningId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [error, setError] = useState("");
+    const [adminNotice, setAdminNotice] = useState("");
     const [notice, setNotice] = useState("");
 
     const [targetDepartment, setTargetDepartment] = useState(defaultDepartment(user));
@@ -75,25 +76,40 @@ export default function DocumentPanel({ user }: DocumentPanelProps) {
 
     const signer = canSignDocuments(user);
 
+    const loadSignerExtras = useCallback(async () => {
+        if (!user.token || !signer) return;
+        try {
+            const [pending, status] = await Promise.all([
+                getPendingSignatureDocuments(user.token),
+                getRagIndexStatus(user.token),
+            ]);
+            setPendingDocs(pending);
+            setRagStatus(status);
+            setAdminNotice("");
+        } catch {
+            setPendingDocs([]);
+            setRagStatus(null);
+            setAdminNotice("签名/RAG 状态暂不可用，请确认后端通过根目录 python main.py 或 backend/main.py 启动。");
+        }
+    }, [signer, user.token]);
+
     const refreshAll = useCallback(async () => {
         if (!user.token) return;
         setLoading(true);
         setError("");
+        setAdminNotice("");
         try {
             const docs = await getAccessibleDocuments(user.token);
             setDocuments(docs);
             if (signer) {
-                const pending = await getPendingSignatureDocuments(user.token);
-                setPendingDocs(pending);
-                const status = await getRagIndexStatus(user.token);
-                setRagStatus(status);
+                await loadSignerExtras();
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "无法加载资料");
         } finally {
             setLoading(false);
         }
-    }, [signer, user.token]);
+    }, [loadSignerExtras, signer, user.token]);
 
     useEffect(() => {
         void refreshAll();
@@ -259,6 +275,7 @@ export default function DocumentPanel({ user }: DocumentPanelProps) {
                             </span>
                         )}
                     </div>
+                    {adminNotice && <p className={styles.inlineNotice}>{adminNotice}</p>}
                     {pendingDocs.length === 0 ? (
                         <p className={styles.emptyArchive}>暂无待签名文档。</p>
                     ) : (
