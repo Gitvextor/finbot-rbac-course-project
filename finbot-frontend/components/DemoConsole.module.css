@@ -592,7 +592,7 @@
 
 .eventList article {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) 140px 180px;
+    grid-template-columns: minmax(120px, 1fr) 100px 120px 180px;
     gap: 8px;
     padding: 10px;
     border-radius: 8px;

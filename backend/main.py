@@ -37,15 +37,22 @@ from config import (
 )
 from models.audit_log import AuditAction
 
-# ── RAG pipeline imports (成员B) ──
-try:
-    from router import route_query as do_route_query
-    from rag import answer as rag_answer
-    RAG_AVAILABLE = True
-except Exception as e:
+# RAG pipeline imports (member B).  Presentation mode defaults to the
+# lightweight path so a broken local embedding model cannot prevent login,
+# audit dashboards, document archive, or RBAC demos from starting.
+if os.getenv("FINBOT_SKIP_RAG", "1") == "1":
     RAG_AVAILABLE = False
-    RAG_IMPORT_ERROR = str(e)
-    print(f"[WARNING] RAG pipeline not available: {e}")
+    RAG_IMPORT_ERROR = "Skipped by FINBOT_SKIP_RAG=1"
+    print("[INFO] RAG pipeline skipped for stable demo startup.")
+else:
+    try:
+        from router import route_query as do_route_query
+        from rag import answer as rag_answer
+        RAG_AVAILABLE = True
+    except Exception as e:
+        RAG_AVAILABLE = False
+        RAG_IMPORT_ERROR = str(e)
+        print(f"[WARNING] RAG pipeline not available: {e}")
 
 SERVER_BOOT_ID = str(uuid.uuid4())
 

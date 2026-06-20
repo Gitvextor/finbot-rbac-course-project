@@ -7,6 +7,20 @@ import {
 } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const CHAT_TIMEOUT_MS = 120000;
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatNetworkError(err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+        return "请求超时。首次查询可能仍在构建知识库，请稍等后重试。";
+    }
+
+    const detail = err instanceof Error ? err.message : String(err);
+    return `无法连接后端服务（${API_URL}）。请确认 backend 正在运行，端口 8000 未被关闭；原始错误：${detail}`;
+}
 
 async function parseResponse<T>(res: Response): Promise<T> {
     const payload = await res.json().catch(() => ({}));
@@ -22,53 +36,57 @@ export async function sendQuery(data: {
     query: string;
     session_id?: string;
 }): Promise<ChatResponse> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
+    let lastError: unknown;
 
-    try {
-        const res = await fetch(`${API_URL}/api/chat`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-session-id": data.user_id,
-            },
-            body: JSON.stringify({
-                query: data.query,
-                role: data.role,
-                user_id: data.user_id,
-                session_id: data.session_id ?? data.user_id,
-            }),
-            signal: controller.signal,
-        });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
 
-        const payload = await res.json().catch(() => ({}));
+        try {
+            const res = await fetch(`${API_URL}/api/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-session-id": data.user_id,
+                },
+                body: JSON.stringify({
+                    query: data.query,
+                    role: data.role,
+                    user_id: data.user_id,
+                    session_id: data.session_id ?? data.user_id,
+                }),
+                signal: controller.signal,
+            });
 
-        if (!res.ok) {
-            return {
-                blocked: true,
-                block_reason:
-                    payload.detail ||
-                    `Server error (${res.status}). Check backend logs.`,
-            };
+            const payload = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                return {
+                    blocked: true,
+                    block_reason:
+                        payload.detail ||
+                        `后端返回错误 (${res.status})，请检查 backend 日志。`,
+                };
+            }
+
+            return payload;
+        } catch (err) {
+            lastError = err;
+            if (err instanceof DOMException && err.name === "AbortError") {
+                break;
+            }
+            if (attempt === 0) {
+                await sleep(700);
+            }
+        } finally {
+            clearTimeout(timeout);
         }
-
-        return payload;
-    } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-            return {
-                blocked: true,
-                block_reason:
-                    "Request timed out. First query may still be building the knowledge base; wait and retry.",
-            };
-        }
-
-        return {
-            blocked: true,
-            block_reason: "Failed to connect to server",
-        };
-    } finally {
-        clearTimeout(timeout);
     }
+
+    return {
+        blocked: true,
+        block_reason: formatNetworkError(lastError),
+    };
 }
 
 export async function loginDemoUser(username: string, password: string, chatRole: AuthUser["chat_role"], label?: string) {
